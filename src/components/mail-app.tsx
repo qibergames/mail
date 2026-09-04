@@ -13,6 +13,7 @@ import {
   LockKeyhole,
   LogOut,
   Mail,
+  MailOpen,
   Menu,
   MoonStar,
   Paperclip,
@@ -29,6 +30,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Button } from './ui/button'
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from './ui/context-menu'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
@@ -284,7 +286,21 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                 <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
                   {rowVirtualizer.getVirtualItems().map((row) => {
                     const message = messages[row.index]
-                    return <div key={message.id} data-index={row.index} ref={rowVirtualizer.measureElement} style={{ transform: `translateY(${row.start}px)` }} className={cn('absolute inset-x-0 top-0 flex border-b border-l-4 border-l-transparent hover:bg-muted/70', !message.read && 'border-l-primary bg-primary/10', selected?.id === message.id && 'bg-secondary')}><label className="grid w-11 shrink-0 place-items-center"><input type="checkbox" checked={selectedIds.includes(message.id)} onChange={(event) => setSelectedIds((ids) => event.target.checked ? [...ids, message.id] : ids.filter((id) => id !== message.id))} aria-label={i18n._('Select')} /></label><button type="button" onClick={() => selectMessage(message)} className="grid min-w-0 flex-1 grid-cols-[1fr_auto] gap-2 p-4 pl-0 text-left"><span className="sr-only">{message.read ? i18n._('Read') : i18n._('Unread')}</span><span className="min-w-0"><span className={cn('block truncate text-sm', message.read ? 'text-muted-foreground' : 'font-semibold')}>{view === 'sent' ? message.toAddr : message.fromAddr}</span><span className={cn('mt-1 block truncate text-sm', message.read ? 'text-muted-foreground' : 'font-semibold')}>{message.subject || i18n._('(No subject)')}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{message.snippet}</span></span><span className={cn('text-xs', message.read ? 'text-muted-foreground' : 'font-semibold')}>{new Date(message.createdAt).toLocaleDateString(i18n.locale)}</span></button></div>
+                    return <ContextMenu key={message.id}>
+                      <ContextMenuTrigger asChild>
+                        <div data-index={row.index} ref={rowVirtualizer.measureElement} style={{ transform: `translateY(${row.start}px)` }} className={cn('absolute inset-x-0 top-0 flex border-b border-l-4 border-l-transparent hover:bg-muted/70', !message.read && 'border-l-primary bg-primary/10', selected?.id === message.id && 'bg-secondary')}><label className="grid w-11 shrink-0 place-items-center"><input type="checkbox" checked={selectedIds.includes(message.id)} onChange={(event) => setSelectedIds((ids) => event.target.checked ? [...ids, message.id] : ids.filter((id) => id !== message.id))} aria-label={i18n._('Select')} /></label><button type="button" onClick={() => selectMessage(message)} className="grid min-w-0 flex-1 grid-cols-[1fr_auto] gap-2 p-4 pl-0 text-left"><span className="sr-only">{message.read ? i18n._('Read') : i18n._('Unread')}</span><span className="min-w-0"><span className={cn('block truncate text-sm', message.read ? 'text-muted-foreground' : 'font-semibold')}>{view === 'sent' ? message.toAddr : message.fromAddr}</span><span className={cn('mt-1 block truncate text-sm', message.read ? 'text-muted-foreground' : 'font-semibold')}>{message.subject || i18n._('(No subject)')}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{message.snippet}</span></span><span className={cn('text-xs', message.read ? 'text-muted-foreground' : 'font-semibold')}>{new Date(message.createdAt).toLocaleDateString(i18n.locale)}</span></button></div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onSelect={() => updateMessage(message.id, { read: !message.read })}>{message.read ? <><Mail /><Trans id="Mark unread" /></> : <><MailOpen /><Trans id="Mark read" /></>}</ContextMenuItem>
+                        <ContextMenuItem onSelect={() => updateMessage(message.id, { starred: !message.starred })}><Star className={message.starred ? 'fill-yellow-400 text-yellow-500' : ''} />{message.starred ? <Trans id="Unstar" /> : <Trans id="Star" />}</ContextMenuItem>
+                        <ContextMenuSeparator />
+                        {['archived', 'spam', 'trash'].includes(message.status)
+                          ? <ContextMenuItem onSelect={() => updateMessage(message.id, { status: 'received' })}><Inbox /><Trans id="Move to inbox" /></ContextMenuItem>
+                          : <ContextMenuItem onSelect={() => updateMessage(message.id, { status: 'archived' })}><Archive /><Trans id="Archive" /></ContextMenuItem>}
+                        {message.status !== 'spam' && <ContextMenuItem onSelect={() => updateMessage(message.id, { status: 'spam' })}><ShieldAlert /><Trans id="Mark as spam" /></ContextMenuItem>}
+                        {message.status !== 'trash' && <ContextMenuItem className="text-destructive focus:text-destructive" onSelect={() => updateMessage(message.id, { status: 'trash' })}><Trash2 /><Trans id="Delete" /></ContextMenuItem>}
+                      </ContextMenuContent>
+                    </ContextMenu>
                   })}
                 </div>
               </div>

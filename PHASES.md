@@ -32,6 +32,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 21. Admin render stabilizálás | `done` | Stabil hook-sorrend és fordítási figyelmeztetés nélküli admin route |
 | 22. Push állapotjelzés | `done` | Aktuális eszköz-subscription jól látható állapota |
 | 23. IMAP import űrlap | `done` | Áttekinthető, szekciókra bontott importbeállítások |
+| 24. Email helyi menü | `done` | Jobb klikkes, akadálymentes levélműveletek |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -280,6 +281,15 @@ Ellenőrzőkapu: TypeScript, ESLint, Bun-tesztek és production build.
 
 Eredmény: az IMAP import kevesebb vizuális zajjal, követhető sorrendben tölthető ki.
 
+## 24. fázis – Email helyi menü `done`
+
+- A levélsorok jobb klikkre és billentyűzetről is elérhető helyi menüt nyitnak.
+- Olvasottság, csillagozás, archiválás, spam, kuka és visszahelyezés kezelhető a menüből.
+
+Ellenőrzőkapu: TypeScript, ESLint, Bun-tesztek és production build.
+
+Eredmény: a leggyakoribb levélműveletek a lista elhagyása nélkül elérhetők.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -311,3 +321,4 @@ Eredmény: az IMAP import kevesebb vizuális zajjal, követhető sorrendben töl
 - 2026-09-04: 21. fázis lezárva. Az admin route hook-sorrendje és a dinamikus Lingui-használat javítva.
 - 2026-09-04: 22. fázis lezárva. A push értesítési kapcsoló aktuális eszközállapota láthatóvá vált.
 - 2026-09-04: 23. fázis lezárva. Az IMAP import űrlapja áttekinthető, reszponzív szekciókra lett bontva.
+- 2026-09-04: 24. fázis lezárva. A levélsorok teljes, akadálymentes helyi menüt kaptak.
