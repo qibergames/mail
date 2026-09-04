@@ -16,7 +16,6 @@ import {
   MailOpen,
   Menu,
   MoonStar,
-  Paperclip,
   Search,
   Send,
   Settings,
@@ -25,14 +24,14 @@ import {
   Trash2,
   TriangleAlert,
   Wrench,
-  X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { Composer } from './composer'
+import type { Draft } from './composer'
 import { Button } from './ui/button'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from './ui/context-menu'
 import { Input } from './ui/input'
-import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { authClient } from '@/lib/auth-client'
 import { resolveInlineImages } from '@/lib/email/html'
@@ -59,7 +58,6 @@ type Message = {
 }
 type Attachment = { id: string; filename: string; contentType: string; size: number; contentId: string | null }
 type MessageDetail = { message: Message; attachments: Array<Attachment>; security: SecurityDetails | null }
-type Draft = { id?: string; to?: string; subject?: string; text?: string }
 
 function senderParts(value: string) {
   const address = value.match(/<([^>]+)>/)?.[1]
@@ -353,7 +351,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
         </div>
       </section>
       {mobileMenu && <button type="button" aria-label={i18n._('Close menu')} className="absolute inset-0 z-20 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)} />}
-      {composer && <Composer mailboxId={mailboxId} draft={composer} close={() => setComposer(null)} sent={() => { setComposer(null); setRefresh((value) => value + 1) }} />}
+      {composer && <Composer mailboxes={mailboxes} mailboxId={mailboxId} draft={composer} close={() => setComposer(null)} sent={() => { setComposer(null); setRefresh((value) => value + 1) }} />}
     </main>
   )
 }
@@ -416,82 +414,6 @@ function MessageHeader({ message, security, open, onToggle, ownAddresses }: { me
           <Trans id="This message failed sender verification. Be careful with links and attachments." />
         </p>
       )}
-    </div>
-  )
-}
-
-function Composer({ mailboxId, draft, close, sent }: { mailboxId: string; draft: Draft; close: () => void; sent: () => void }) {
-  const { i18n } = useLingui()
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState('')
-  const [draftId, setDraftId] = useState(draft.id)
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const formRef = useRef<HTMLFormElement>(null)
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string; subject: string; textBody: string }>>([])
-
-  useEffect(() => {
-    void fetch('/api/tools').then((response) => response.json<{ templates: Array<{ id: string; name: string; subject: string; textBody: string }> }>()).then((data) => setTemplates(data.templates))
-  }, [])
-
-  function autosave(form: HTMLFormElement) {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(async () => {
-      const data = new FormData(form)
-      const response = await fetch('/api/drafts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: draftId, mailboxId, to: data.get('to'), subject: data.get('subject'), text: data.get('text') }),
-      })
-      if (response.ok) setDraftId((await response.json<{ id: string }>()).id)
-    }, 800)
-  }
-
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    setSending(true)
-    setError('')
-    const data = new FormData(event.currentTarget)
-    const files = data.getAll('attachments').filter((item): item is File => item instanceof File && item.size > 0)
-    const attachments = await Promise.all(files.map(async (file) => {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      let binary = ''
-      for (const byte of bytes) binary += String.fromCharCode(byte)
-      return { filename: file.name, type: file.type || 'application/octet-stream', content: btoa(binary) }
-    }))
-    const response = await fetch('/api/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mailboxId,
-        draftId,
-        to: data.get('to'),
-        subject: data.get('subject'),
-        text: data.get('text'),
-        scheduledAt: data.get('scheduledAt') ? new Date(String(data.get('scheduledAt'))).toISOString() : undefined,
-        attachments,
-      }),
-    })
-    setSending(false)
-    if (!response.ok) {
-      const result = await response.json<{ error?: string }>().catch(() => null)
-      return setError(result?.error ?? i18n._('Send failed'))
-    }
-    sent()
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="composer-title">
-      <form ref={formRef} onSubmit={submit} onInput={(event) => autosave(event.currentTarget)} className="grid max-h-dvh w-full max-w-2xl gap-4 overflow-y-auto rounded-t-2xl bg-background p-5 shadow-2xl sm:rounded-2xl">
-        <div className="flex items-center"><h2 id="composer-title" className="text-lg font-semibold"><Trans id="New message" /></h2><Button type="button" variant="ghost" size="icon" className="ml-auto" onClick={close} aria-label={i18n._('Close')} title={i18n._('Close')}><X /></Button></div>
-        {templates.length > 0 && <select aria-label={i18n._('Template')} className="h-10 rounded-md border bg-background px-3 text-sm" defaultValue="" onChange={(event) => { const template = templates.find((item) => item.id === event.target.value); const form = formRef.current; if (!template || !form) return; (form.elements.namedItem('subject') as HTMLInputElement).value = template.subject; (form.elements.namedItem('text') as HTMLTextAreaElement).value = template.textBody; autosave(form) }}><option value=""><Trans id="Choose template" /></option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select>}
-        <div className="grid gap-2"><Label htmlFor="compose-to"><Trans id="To" /></Label><Input id="compose-to" name="to" type="email" defaultValue={draft.to} required /></div>
-        <div className="grid gap-2"><Label htmlFor="compose-subject"><Trans id="Subject" /></Label><Input id="compose-subject" name="subject" defaultValue={draft.subject} /></div>
-        <textarea name="text" defaultValue={draft.text} aria-label={i18n._('Message')} className="min-h-56 resize-y rounded-md border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" required />
-        <div className="grid gap-2"><Label htmlFor="compose-scheduled"><Trans id="Schedule send" /></Label><Input id="compose-scheduled" name="scheduledAt" type="datetime-local" /></div>
-        <div className="flex flex-wrap items-center gap-2"><Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2"><Paperclip className="size-4" /><Trans id="Attachments" /><input className="sr-only" name="attachments" type="file" multiple /></Label><Button className="ml-auto" disabled={sending || !mailboxId}>{sending ? <LoaderCircle className="animate-spin" /> : <Send />}<Trans id="Send" /></Button></div>
-        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      </form>
     </div>
   )
 }
