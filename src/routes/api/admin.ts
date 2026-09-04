@@ -11,7 +11,7 @@ import { newId } from '@/lib/ids'
 import { hostnameSchema as hostname, localPartSchema as localPart } from '@/lib/validation'
 
 const actionSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('user:create'), name: z.string().trim().min(1).max(100), email: z.email(), password: z.string().min(12).max(128), role: z.enum(['admin', 'user']).default('user') }),
+  z.object({ action: z.literal('user:create'), name: z.string().trim().min(1).max(100), localPart, domainId: z.string().min(1), password: z.string().min(12).max(128), role: z.enum(['admin', 'user']).default('user'), createMailbox: z.boolean().default(true) }),
   z.object({ action: z.literal('user:role'), userId: z.string(), role: z.enum(['admin', 'user']) }),
   z.object({ action: z.literal('user:ban'), userId: z.string(), banned: z.boolean() }),
   z.object({ action: z.literal('domain:create'), hostname }),
@@ -56,7 +56,21 @@ async function runAdminAction(request: Request, session: Awaited<ReturnType<type
   const db = getDb()
   let result: unknown = null
   if (input.action === 'user:create') {
-    result = await auth.api.createUser({ headers: request.headers, body: input })
+    const domain = (await db.select().from(domains).where(eq(domains.id, input.domainId)).limit(1)).at(0)
+    if (!domain) return Response.json({ error: 'Unknown domain' }, { status: 400 })
+    const address = `${input.localPart}@${domain.hostname}`
+    if (input.createMailbox && (await db.select({ id: mailboxes.id }).from(mailboxes).where(and(eq(mailboxes.domainId, domain.id), eq(mailboxes.localPart, input.localPart))).limit(1)).length) return Response.json({ error: 'Mailbox already exists' }, { status: 409 })
+    const created = await auth.api.createUser({ headers: request.headers, body: { name: input.name, email: address, password: input.password, role: input.role } })
+    if (input.createMailbox) {
+      const rule = await createMailboxRoute(env, domain.zoneId, address)
+      try {
+        await db.insert(mailboxes).values({ id: newId('mbx'), userId: created.user.id, domainId: domain.id, localPart: input.localPart, displayName: input.name, type: 'personal' })
+      } catch (error) {
+        await deleteMailboxRoute(env, domain.zoneId, rule.id).catch(console.warn)
+        throw error
+      }
+    }
+    result = { id: created.user.id, address }
   } else if (input.action === 'user:role') {
     if (input.userId === session.user.id && input.role !== 'admin') return Response.json({ error: 'Cannot demote yourself' }, { status: 400 })
     result = await auth.api.setRole({ headers: request.headers, body: { userId: input.userId, role: input.role } })

@@ -19,14 +19,14 @@ type AdminData = {
 
 type AdminSection = 'accounts' | 'audit' | 'domains' | 'mailboxes' | 'aliases' | 'access' | 'routing'
 
-const sectionDetails: Record<AdminSection, { title: string; description: string; action?: string; icon: LucideIcon }> = {
-  accounts: { title: 'Accounts', description: 'Create, disable and assign roles.', action: 'Create account', icon: Users },
+const sectionDetails: Record<AdminSection, { title: string; description: string; action?: string; hint?: string; icon: LucideIcon }> = {
+  accounts: { title: 'Accounts', description: 'Create, disable and assign roles.', action: 'Create account', hint: 'Create a sign-in account and, optionally, its first mailbox.', icon: Users },
   audit: { title: 'Audit log', description: 'Administrative activity across QiberMail.', icon: ScrollText },
-  domains: { title: 'Domains', description: 'Cloudflare Email Routing domains', action: 'Add domain', icon: Globe2 },
-  mailboxes: { title: 'Mailboxes', description: 'Personal and shared mailboxes', action: 'Create mailbox', icon: Mail },
-  aliases: { title: 'Aliases', description: 'Additional addresses for a mailbox', action: 'Add alias', icon: AtSign },
-  access: { title: 'Shared access', description: 'Delegate a mailbox with explicit permissions.', action: 'Grant access', icon: UserRoundCog },
-  routing: { title: 'Domain routing', description: 'Store, forward or reject matching recipients.', action: 'Add rule', icon: RouteIcon },
+  domains: { title: 'Domains', description: 'Cloudflare Email Routing domains', action: 'Add domain', hint: 'Connect a Cloudflare zone and provision routing automatically.', icon: Globe2 },
+  mailboxes: { title: 'Mailboxes', description: 'Personal and shared mailboxes', action: 'Create mailbox', hint: 'Add an address and provision its routing rule automatically.', icon: Mail },
+  aliases: { title: 'Aliases', description: 'Additional addresses for a mailbox', action: 'Add alias', hint: 'Route an additional address to an existing mailbox.', icon: AtSign },
+  access: { title: 'Shared access', description: 'Delegate a mailbox with explicit permissions.', action: 'Grant access', hint: 'Let another account read or send from a mailbox.', icon: UserRoundCog },
+  routing: { title: 'Domain routing', description: 'Store, forward or reject matching recipients.', action: 'Add rule', hint: 'Match recipients on a domain and store, forward or reject them.', icon: RouteIcon },
 }
 
 export function AdminApp({ section }: { section: AdminSection }) {
@@ -35,6 +35,7 @@ export function AdminApp({ section }: { section: AdminSection }) {
   const [status, setStatus] = useState<Status>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [mailboxType, setMailboxType] = useState<'personal' | 'shared'>('personal')
 
   async function load() {
     const response = await fetch('/api/admin')
@@ -79,10 +80,17 @@ export function AdminApp({ section }: { section: AdminSection }) {
       {section === 'audit' && <div className="grid gap-2">{data.logs.map((log) => <ItemCard key={log.id} icon={ScrollText} title={log.action} description={new Date(log.createdAt).toLocaleString(i18n.locale)} meta={log.metadata} />)}</div>}
     </section>
 
-    <AdminModal open={createOpen} title={i18n._(details.action || details.title)} onClose={() => { setCreateOpen(false); setStatus(null) }} status={status}>
-      {section === 'accounts' && <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'user:create', name: form.get('name'), email: form.get('email'), password: form.get('password'), role: form.get('role') }, event.currentTarget) }}><Field label="Name" name="name" required /><Field label="Email" name="email" type="email" required /><Field label="Temporary password" name="password" type="password" minLength={12} required /><SelectField label="Role" name="role" options={[['user', i18n._('User')], ['admin', i18n._('Administrator')]]} /><FormActions busy={busy} close={() => setCreateOpen(false)} label="Create account" /></form>}
+    <AdminModal open={createOpen} title={i18n._(details.action || details.title)} onClose={() => { setCreateOpen(false); setStatus(null) }} status={status} description={details.hint}>
+      {section === 'accounts' && <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'user:create', name: form.get('name'), localPart: form.get('localPart'), domainId: form.get('domainId'), password: form.get('password'), role: form.get('role'), createMailbox: form.get('createMailbox') === 'on' }, event.currentTarget) }}><Field label="Name" name="name" required /><div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2"><Field label="Address" name="localPart" placeholder="info" required /><span className="pb-2.5 text-muted-foreground">@</span><SelectField label="Domain" name="domainId" options={data.domains.map((domain) => [domain.id, domain.hostname] as [string, string])} /></div><Field label="Temporary password" name="password" type="password" minLength={12} required /><SelectField label="Role" name="role" options={[['user', i18n._('User')], ['admin', i18n._('Administrator')]]} /><CheckboxField label="Create a mailbox for this address" name="createMailbox" defaultChecked className="sm:col-span-2" /><FormActions busy={busy || !data.domains.length} close={() => setCreateOpen(false)} label="Create account" /></form>}
       {section === 'domains' && <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'domain:create', hostname: form.get('hostname') }, event.currentTarget) }}><Field label="Domain" name="hostname" placeholder="example.com" required /><FormActions busy={busy} close={() => setCreateOpen(false)} label="Add domain" /></form>}
-      {section === 'mailboxes' && <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'mailbox:create', userId: form.get('userId'), domainId: form.get('domainId'), localPart: form.get('localPart'), displayName: form.get('displayName'), mailboxType: form.get('mailboxType') }, event.currentTarget) }}><SelectField label="Owner" name="userId" options={data.users.map((user) => [user.id, user.name] as [string, string])} /><SelectField label="Domain" name="domainId" options={data.domains.map((domain) => [domain.id, domain.hostname] as [string, string])} /><Field label="Address" name="localPart" required /><Field label="Display name" name="displayName" /><SelectField label="Mailbox type" name="mailboxType" options={[['personal', i18n._('Personal')], ['shared', i18n._('Shared')]]} /><FormActions busy={busy || !data.domains.length} close={() => setCreateOpen(false)} label="Create mailbox" /></form>}
+      {section === 'mailboxes' && <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'mailbox:create', userId: form.get('userId'), domainId: form.get('domainId'), localPart: form.get('localPart'), displayName: form.get('displayName'), mailboxType }, event.currentTarget) }}>
+        <SelectField label="Type" name="mailboxType" value={mailboxType} onChange={(event) => setMailboxType(event.target.value as 'personal' | 'shared')} className="sm:col-span-2 sm:w-64" options={[['personal', i18n._('Personal inbox')], ['shared', i18n._('Shared inbox')]]} />
+        <InfoNote>{mailboxType === 'shared' ? <Trans id="After creating the shared inbox, choose which accounts can access it under Shared access." /> : <Trans id="A personal inbox belongs to one account, which signs in and uses it directly." />}</InfoNote>
+        <SelectField label={mailboxType === 'shared' ? 'Owner' : 'Account'} name="userId" options={data.users.map((user) => [user.id, user.name] as [string, string])} />
+        <Field label="Display name" name="displayName" placeholder={mailboxType === 'shared' ? i18n._('Support team') : ''} />
+        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 sm:col-span-2"><Field label="Address" name="localPart" placeholder={mailboxType === 'shared' ? 'support' : 'name'} required /><span className="pb-2.5 text-muted-foreground">@</span><SelectField label="Domain" name="domainId" options={data.domains.map((domain) => [domain.id, domain.hostname] as [string, string])} /></div>
+        <FormActions busy={busy || !data.domains.length} close={() => setCreateOpen(false)} label="Create mailbox" />
+      </form>}
       {section === 'aliases' && <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'alias:create', mailboxId: form.get('mailboxId'), domainId: form.get('domainId'), localPart: form.get('localPart') }, event.currentTarget) }}><SelectField label="Mailbox" name="mailboxId" options={data.mailboxes.map((mailbox) => [mailbox.id, mailboxAddress(data, mailbox.id)] as [string, string])} /><SelectField label="Domain" name="domainId" options={data.domains.map((domain) => [domain.id, domain.hostname] as [string, string])} /><Field label="Alias address" name="localPart" required /><FormActions busy={busy || !data.mailboxes.length} close={() => setCreateOpen(false)} label="Add alias" /></form>}
       {section === 'access' && <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'access:set', mailboxId: form.get('mailboxId'), userId: form.get('userId'), permission: form.get('permission') }, event.currentTarget) }}><SelectField label="Mailbox" name="mailboxId" options={data.mailboxes.map((mailbox) => [mailbox.id, mailboxAddress(data, mailbox.id)] as [string, string])} /><SelectField label="Account" name="userId" options={data.users.map((user) => [user.id, user.name] as [string, string])} /><SelectField label="Permission" name="permission" options={['read_only', 'send_as', 'send_on_behalf', 'full_access']} /><FormActions busy={busy || !data.mailboxes.length} close={() => setCreateOpen(false)} label="Save access" /></form>}
       {section === 'routing' && <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'rule:create', domainId: form.get('domainId'), mailboxId: form.get('mailboxId') || null, name: form.get('name'), pattern: form.get('pattern'), actionType: form.get('actionType'), forwardTo: form.get('forwardTo'), keepCopy: form.get('keepCopy') === 'on' }, event.currentTarget) }}><SelectField label="Domain" name="domainId" options={data.domains.map((domain) => [domain.id, domain.hostname] as [string, string])} /><SelectField label="Mailbox" name="mailboxId" options={[['', i18n._('No mailbox')], ...data.mailboxes.map((mailbox) => [mailbox.id, mailboxAddress(data, mailbox.id)] as [string, string])]} /><Field label="Rule name" name="name" required /><Field label="Recipient pattern" name="pattern" required /><SelectField label="Action" name="actionType" options={['store', 'forward', 'reject']} /><Field label="Forward to" name="forwardTo" type="email" /><CheckboxField label="Keep a copy" name="keepCopy" /><FormActions busy={busy || !data.domains.length} close={() => setCreateOpen(false)} label="Add rule" /></form>}
@@ -90,7 +98,7 @@ export function AdminApp({ section }: { section: AdminSection }) {
   </>
 }
 
-function AdminModal({ open, title, onClose, status, children }: { open: boolean; title: string; onClose: () => void; status: Status; children: React.ReactNode }) {
+function AdminModal({ open, title, description, onClose, status, children }: { open: boolean; title: string; description?: string; onClose: () => void; status: Status; children: React.ReactNode }) {
   const { i18n } = useLingui()
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
@@ -98,9 +106,13 @@ function AdminModal({ open, title, onClose, status, children }: { open: boolean;
     if (!open && ref.current?.open) ref.current.close()
   }, [open])
   return <dialog ref={ref} onCancel={onClose} className="m-auto max-h-[calc(100dvh-2rem)] w-[min(36rem,calc(100%-2rem))] overflow-y-auto rounded-2xl border bg-background p-0 text-foreground shadow-2xl backdrop:bg-black/50 backdrop:backdrop-blur-sm">
-    <div className="flex items-center border-b px-5 py-4"><h2 className="text-xl font-semibold">{title}</h2><Button className="ml-auto" type="button" size="icon" variant="ghost" onClick={onClose} title={i18n._('Close')}><X /><span className="sr-only"><Trans id="Close" /></span></Button></div>
+    <div className="flex items-start gap-3 border-b px-5 py-4"><div className="min-w-0 flex-1"><h2 className="text-xl font-semibold">{title}</h2>{description && <p className="mt-1 text-sm text-muted-foreground"><Trans id={description} /></p>}</div><Button className="shrink-0" type="button" size="icon" variant="ghost" onClick={onClose} title={i18n._('Close')}><X /><span className="sr-only"><Trans id="Close" /></span></Button></div>
     <div className="grid gap-4 p-5">{status?.tone === 'error' && <StatusBanner status={status} />}{children}</div>
   </dialog>
+}
+
+function InfoNote({ children }: { children: React.ReactNode }) {
+  return <p className="rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-primary sm:col-span-2 dark:text-blue-300">{children}</p>
 }
 
 function FormActions({ busy, close, label }: { busy: boolean; close: () => void; label: string }) {
