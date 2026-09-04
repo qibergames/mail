@@ -90,6 +90,26 @@ const navigation = [
   { view: 'trash', href: '/trash', icon: Trash2, label: 'Trash' },
 ] as const
 
+const MAILBOX_STORAGE_KEY = 'qibermail:mailbox'
+
+function readSearch(key: string) {
+  return typeof location === 'undefined' ? null : new URLSearchParams(location.search).get(key)
+}
+
+function writeSearch(changes: Record<string, string | null>) {
+  if (typeof history === 'undefined') return
+  const url = new URL(location.href)
+  for (const [key, value] of Object.entries(changes)) {
+    if (value) url.searchParams.set(key, value)
+    else url.searchParams.delete(key)
+  }
+  if (url.href !== location.href) history.replaceState(history.state, '', url)
+}
+
+function storedMailbox() {
+  try { return localStorage.getItem(MAILBOX_STORAGE_KEY) } catch { return null }
+}
+
 export function MailApp({ view, folderId }: { view: MailView; folderId?: string }) {
   const { i18n } = useLingui()
   const { data: session } = authClient.useSession()
@@ -116,9 +136,24 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   useEffect(() => {
     void fetch('/api/mailboxes').then((response) => response.json<Array<Mailbox>>()).then((rows) => {
       setMailboxes(rows)
-      setMailboxId((current) => current || rows[0]?.id || '')
+      const preferred = readSearch('mailbox') ?? storedMailbox()
+      setMailboxId((current) => current || (preferred && rows.some((row) => row.id === preferred) ? preferred : rows[0]?.id || ''))
     })
   }, [])
+
+  useEffect(() => {
+    if (!mailboxId) return
+    try { localStorage.setItem(MAILBOX_STORAGE_KEY, mailboxId) } catch { /* storage unavailable */ }
+    writeSearch({ mailbox: mailboxId })
+  }, [mailboxId])
+
+  const openedMessage = useRef(false)
+  useEffect(() => {
+    // Skip the initial null so the restore effect below can still read ?message= from the URL.
+    if (!selected && !openedMessage.current) return
+    openedMessage.current = true
+    writeSearch({ message: selected?.id ?? null })
+  }, [selected])
 
   useEffect(() => {
     void fetch('/api/folders').then((response) => response.json<Array<Folder>>()).then(setFolders)
@@ -130,7 +165,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   }, [folderId, folders])
 
   useEffect(() => {
-    const messageId = new URLSearchParams(location.search).get('message')
+    const messageId = readSearch('message')
     if (!messageId) return
     void fetch(`/api/messages/${encodeURIComponent(messageId)}`).then(async (response) => {
       if (!response.ok) return

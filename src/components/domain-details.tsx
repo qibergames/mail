@@ -1,7 +1,7 @@
 import { Trans, useLingui } from '@lingui/react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
-import { AlertCircle, ArrowLeft, AtSign, CheckCircle2, CircleDashed, Globe2, Inbox, LoaderCircle, Mail, RefreshCw, Route as RouteIcon, Send, ShieldCheck, TriangleAlert, Wrench } from 'lucide-react'
+import { AlertCircle, ArrowLeft, AtSign, CheckCircle2, CircleDashed, Globe2, Inbox, LoaderCircle, Mail, RefreshCw, Route as RouteIcon, Send, ShieldCheck, Trash2, TriangleAlert, Wrench } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { Status } from './section-ui'
 import { Badge, EmptyState, Loading, StatusBanner } from './section-ui'
@@ -23,6 +23,7 @@ const checkLabels: Record<DomainInspection['checks'][number]['kind'], string> = 
 
 export function DomainDetails({ domainId }: { domainId: string }) {
   const { i18n } = useLingui()
+  const navigate = useNavigate()
   const [data, setData] = useState<DomainDetailsData | null>(null)
   const [missing, setMissing] = useState(false)
   const [status, setStatus] = useState<Status>(null)
@@ -43,6 +44,17 @@ export function DomainDetails({ domainId }: { domainId: string }) {
     if (response.ok && result) { setData(result); setStatus({ tone: 'success', text: i18n._(action === 'sync' ? 'Synced from Cloudflare' : 'Email sending configured') }) }
     else setStatus({ tone: 'error', text: result?.error || i18n._('Sync failed') })
     setBusy(false)
+  }
+
+  async function remove() {
+    if (!confirm(i18n._('Delete this domain? Routing rules on it are removed. Mailboxes and aliases must be deleted first.'))) return
+    setBusy(true)
+    setStatus(null)
+    const response = await fetch(`/api/admin/domains/${domainId}`, { method: 'DELETE' })
+    const result = await response.json<{ error?: string }>().catch(() => null)
+    setBusy(false)
+    if (response.ok) { void navigate({ to: '/admin/$section', params: { section: 'domains' } }); return }
+    setStatus({ tone: 'error', text: result?.error || i18n._('Save failed') })
   }
 
   if (missing) return <EmptyState icon={Globe2}><Trans id="Domain not found." /><Button asChild variant="outline" size="sm"><Link to="/admin/$section" params={{ section: 'domains' }}><ArrowLeft /><Trans id="Back to domains" /></Link></Button></EmptyState>
@@ -67,7 +79,10 @@ export function DomainDetails({ domainId }: { domainId: string }) {
         <Badge active={domain.routingEnabled}>routing</Badge>
         <Badge active={domain.sendingEnabled}>sending</Badge>
       </div>
-      <Button className="shrink-0" variant="outline" disabled={busy} onClick={() => void sync()}>{busy ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}<Trans id="Sync from Cloudflare" /></Button>
+      <div className="flex shrink-0 gap-2">
+        <Button variant="outline" disabled={busy} onClick={() => void sync()}>{busy ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}<Trans id="Sync from Cloudflare" /></Button>
+        <Button variant="outline" size="icon" className="text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400" disabled={busy} onClick={() => void remove()} aria-label={i18n._('Delete domain')} title={i18n._('Delete domain')}><Trash2 /></Button>
+      </div>
     </div>
     <StatusBanner status={status} />
     {data.cloudflareError && <StatusBanner status={{ tone: 'error', text: `${i18n._('Cloudflare check failed')}: ${data.cloudflareError}` }} />}

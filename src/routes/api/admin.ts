@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { env } from 'cloudflare:workers'
 import { z } from 'zod'
 import { getDb } from '@/db'
@@ -16,8 +16,12 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('user:ban'), userId: z.string(), banned: z.boolean() }),
   z.object({ action: z.literal('domain:create'), hostname }),
   z.object({ action: z.literal('mailbox:create'), userId: z.string(), domainId: z.string(), localPart, displayName: z.string().trim().max(100), mailboxType: z.enum(['personal', 'shared']) }),
-  z.object({ action: z.literal('mailbox:update'), mailboxId: z.string(), userId: z.string(), displayName: z.string().trim().max(100), mailboxType: z.enum(['personal', 'shared']), disabled: z.boolean() }),
+  z.object({ action: z.literal('mailbox:update'), mailboxId: z.string(), userId: z.string(), domainId: z.string().min(1), localPart, displayName: z.string().trim().max(100), mailboxType: z.enum(['personal', 'shared']), disabled: z.boolean() }),
   z.object({ action: z.literal('mailbox:delete'), mailboxId: z.string() }),
+  z.object({ action: z.literal('user:delete'), userId: z.string() }),
+  z.object({ action: z.literal('alias:update'), aliasId: z.string(), mailboxId: z.string(), domainId: z.string(), localPart }),
+  z.object({ action: z.literal('alias:delete'), aliasId: z.string() }),
+  z.object({ action: z.literal('access:delete'), accessId: z.string() }),
   z.object({ action: z.literal('alias:create'), mailboxId: z.string(), domainId: z.string(), localPart }),
   z.object({ action: z.literal('access:set'), mailboxId: z.string(), userId: z.string(), permission: z.enum(['read_only', 'send_as', 'send_on_behalf', 'full_access']) }),
   z.object({ action: z.literal('rule:update'), ruleId: z.string(), mailboxId: z.string().nullable(), name: z.string().trim().min(1).max(100), pattern: z.string().min(1).max(500), actionType: z.enum(['store', 'forward', 'reject']), forwardTo: z.union([z.literal(''), z.email()]), keepCopy: z.boolean(), enabled: z.boolean() }),
@@ -110,14 +114,70 @@ async function runAdminAction(request: Request, session: Awaited<ReturnType<type
     }
   } else if (input.action === 'mailbox:update') {
     if (!(await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1)).length) return Response.json({ error: 'Unknown user' }, { status: 400 })
-    const updated = await db.update(mailboxes).set({ userId: input.userId, displayName: input.displayName || null, type: input.mailboxType, disabled: input.disabled }).where(eq(mailboxes.id, input.mailboxId)).returning({ id: mailboxes.id })
-    if (!updated.length) return Response.json({ error: 'Unknown mailbox' }, { status: 404 })
+    const current = (await db.select({ id: mailboxes.id, userId: mailboxes.userId, domainId: mailboxes.domainId, localPart: mailboxes.localPart, hostname: domains.hostname, zoneId: domains.zoneId }).from(mailboxes).innerJoin(domains, eq(mailboxes.domainId, domains.id)).where(eq(mailboxes.id, input.mailboxId)).limit(1)).at(0)
+    if (!current) return Response.json({ error: 'Unknown mailbox' }, { status: 404 })
+    const target = (await db.select({ id: domains.id, hostname: domains.hostname, zoneId: domains.zoneId }).from(domains).where(eq(domains.id, input.domainId)).limit(1)).at(0)
+    if (!target) return Response.json({ error: 'Unknown domain' }, { status: 400 })
+    const moved = current.domainId !== target.id || current.localPart !== input.localPart
+    const oldAddress = `${current.localPart}@${current.hostname}`
+    const newAddress = `${input.localPart}@${target.hostname}`
+    if (moved) {
+      if ((await db.select({ id: mailboxes.id }).from(mailboxes).where(and(eq(mailboxes.domainId, target.id), eq(mailboxes.localPart, input.localPart))).limit(1)).length) return Response.json({ error: 'Mailbox already exists' }, { status: 409 })
+      if ((await db.select({ id: mailboxAliases.id }).from(mailboxAliases).where(and(eq(mailboxAliases.domainId, target.id), eq(mailboxAliases.localPart, input.localPart))).limit(1)).length) return Response.json({ error: 'An alias already uses this address' }, { status: 409 })
+      const rule = await createMailboxRoute(env, target.zoneId, newAddress)
+      try {
+        await db.update(mailboxes).set({ userId: input.userId, domainId: target.id, localPart: input.localPart, displayName: input.displayName || null, type: input.mailboxType, disabled: input.disabled }).where(eq(mailboxes.id, current.id))
+      } catch (error) {
+        await deleteMailboxRoute(env, target.zoneId, rule.id).catch(console.warn)
+        throw error
+      }
+      await deleteMailboxRouteByAddress(env, current.zoneId, oldAddress).catch(console.warn)
+      const owner = (await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.id, current.userId)).limit(1)).at(0)
+      if (owner && owner.email.toLowerCase() === oldAddress.toLowerCase()) await db.update(users).set({ email: newAddress, updatedAt: new Date() }).where(eq(users.id, owner.id))
+    } else {
+      await db.update(mailboxes).set({ userId: input.userId, displayName: input.displayName || null, type: input.mailboxType, disabled: input.disabled }).where(eq(mailboxes.id, current.id))
+    }
+    result = { id: current.id, address: newAddress }
   } else if (input.action === 'mailbox:delete') {
     const mailbox = (await db.select({ id: mailboxes.id, localPart: mailboxes.localPart, hostname: domains.hostname, zoneId: domains.zoneId }).from(mailboxes).innerJoin(domains, eq(mailboxes.domainId, domains.id)).where(eq(mailboxes.id, input.mailboxId)).limit(1)).at(0)
     if (!mailbox) return Response.json({ error: 'Unknown mailbox' }, { status: 404 })
     const aliases = await db.select({ localPart: mailboxAliases.localPart, hostname: domains.hostname, zoneId: domains.zoneId }).from(mailboxAliases).innerJoin(domains, eq(mailboxAliases.domainId, domains.id)).where(eq(mailboxAliases.mailboxId, mailbox.id))
     await db.delete(mailboxes).where(eq(mailboxes.id, mailbox.id))
     for (const item of [mailbox, ...aliases]) await deleteMailboxRouteByAddress(env, item.zoneId, `${item.localPart}@${item.hostname}`).catch(console.warn)
+  } else if (input.action === 'user:delete') {
+    if (input.userId === session.user.id) return Response.json({ error: 'Cannot delete yourself' }, { status: 400 })
+    const owned = await db.select({ localPart: mailboxes.localPart, hostname: domains.hostname, zoneId: domains.zoneId, id: mailboxes.id }).from(mailboxes).innerJoin(domains, eq(mailboxes.domainId, domains.id)).where(eq(mailboxes.userId, input.userId))
+    const ownedAliases = owned.length ? await db.select({ localPart: mailboxAliases.localPart, hostname: domains.hostname, zoneId: domains.zoneId }).from(mailboxAliases).innerJoin(domains, eq(mailboxAliases.domainId, domains.id)).where(inArray(mailboxAliases.mailboxId, owned.map((item) => item.id))) : []
+    result = await auth.api.removeUser({ headers: request.headers, body: { userId: input.userId } })
+    for (const item of [...owned, ...ownedAliases]) await deleteMailboxRouteByAddress(env, item.zoneId, `${item.localPart}@${item.hostname}`).catch(console.warn)
+  } else if (input.action === 'alias:update') {
+    const current = (await db.select({ id: mailboxAliases.id, domainId: mailboxAliases.domainId, localPart: mailboxAliases.localPart, hostname: domains.hostname, zoneId: domains.zoneId }).from(mailboxAliases).innerJoin(domains, eq(mailboxAliases.domainId, domains.id)).where(eq(mailboxAliases.id, input.aliasId)).limit(1)).at(0)
+    if (!current) return Response.json({ error: 'Unknown alias' }, { status: 404 })
+    const target = (await db.select({ id: domains.id, hostname: domains.hostname, zoneId: domains.zoneId }).from(domains).where(eq(domains.id, input.domainId)).limit(1)).at(0)
+    if (!target || !(await db.select({ id: mailboxes.id }).from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1)).length) return Response.json({ error: 'Unknown mailbox or domain' }, { status: 400 })
+    const moved = current.domainId !== target.id || current.localPart !== input.localPart
+    if (moved) {
+      if ((await db.select({ id: mailboxes.id }).from(mailboxes).where(and(eq(mailboxes.domainId, target.id), eq(mailboxes.localPart, input.localPart))).limit(1)).length) return Response.json({ error: 'Mailbox already exists' }, { status: 409 })
+      if ((await db.select({ id: mailboxAliases.id }).from(mailboxAliases).where(and(eq(mailboxAliases.domainId, target.id), eq(mailboxAliases.localPart, input.localPart))).limit(1)).length) return Response.json({ error: 'An alias already uses this address' }, { status: 409 })
+      const rule = await createMailboxRoute(env, target.zoneId, `${input.localPart}@${target.hostname}`)
+      try {
+        await db.update(mailboxAliases).set({ mailboxId: input.mailboxId, domainId: target.id, localPart: input.localPart }).where(eq(mailboxAliases.id, current.id))
+      } catch (error) {
+        await deleteMailboxRoute(env, target.zoneId, rule.id).catch(console.warn)
+        throw error
+      }
+      await deleteMailboxRouteByAddress(env, current.zoneId, `${current.localPart}@${current.hostname}`).catch(console.warn)
+    } else {
+      await db.update(mailboxAliases).set({ mailboxId: input.mailboxId }).where(eq(mailboxAliases.id, current.id))
+    }
+  } else if (input.action === 'alias:delete') {
+    const alias = (await db.select({ id: mailboxAliases.id, localPart: mailboxAliases.localPart, hostname: domains.hostname, zoneId: domains.zoneId }).from(mailboxAliases).innerJoin(domains, eq(mailboxAliases.domainId, domains.id)).where(eq(mailboxAliases.id, input.aliasId)).limit(1)).at(0)
+    if (!alias) return Response.json({ error: 'Unknown alias' }, { status: 404 })
+    await db.delete(mailboxAliases).where(eq(mailboxAliases.id, alias.id))
+    await deleteMailboxRouteByAddress(env, alias.zoneId, `${alias.localPart}@${alias.hostname}`).catch(console.warn)
+  } else if (input.action === 'access:delete') {
+    const deleted = await db.delete(mailboxAccess).where(eq(mailboxAccess.id, input.accessId)).returning({ id: mailboxAccess.id })
+    if (!deleted.length) return Response.json({ error: 'Unknown access grant' }, { status: 404 })
   } else if (input.action === 'alias:create') {
     const domain = (await db.select().from(domains).where(eq(domains.id, input.domainId)).limit(1)).at(0)
     const mailbox = (await db.select({ id: mailboxes.id }).from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1)).at(0)

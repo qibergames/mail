@@ -18,6 +18,10 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('key:create'), name: z.string().trim().min(1).max(100), scopes: z.array(z.enum(['messages:read', 'messages:send'])).min(1) }),
   z.object({ action: z.literal('webhook:create'), description: z.string().trim().max(200), url: z.url().refine(isPublicHttpsUrl), events: z.array(z.enum(['message.received', 'message.sent'])).min(1), maxAttempts: z.number().int().min(1).max(10) }),
   z.object({ action: z.literal('webhook:test'), id: z.string() }),
+  z.object({ action: z.literal('contact:update'), id: z.string(), email: z.email(), displayName: z.string().trim().max(100) }),
+  z.object({ action: z.literal('template:update'), id: z.string(), name: z.string().trim().min(1).max(100), subject: z.string().max(998), textBody: z.string().max(100_000) }),
+  z.object({ action: z.literal('event:update'), id: z.string(), mailboxId: z.string().nullable(), title: z.string().trim().min(1).max(200), description: z.string().max(20_000), location: z.string().max(500), attendees: z.array(z.email()).max(100), startsAt: z.iso.datetime(), endsAt: z.iso.datetime() }),
+  z.object({ action: z.literal('webhook:update'), id: z.string(), description: z.string().trim().max(200), url: z.url().refine(isPublicHttpsUrl), events: z.array(z.enum(['message.received', 'message.sent'])).min(1), maxAttempts: z.number().int().min(1).max(10), enabled: z.boolean() }),
 ])
 
 export const Route = createFileRoute('/api/tools')({ server: { handlers: {
@@ -55,6 +59,16 @@ export const Route = createFileRoute('/api/tools')({ server: { handlers: {
       return Response.json({ key: await createApiKey(session.user.id, input.name, input.scopes) }, { status: 201 })
     } else if (input.action === 'webhook:create') {
       await db.insert(webhooks).values({ id: newId('whk'), userId: session.user.id, description: input.description || null, url: input.url, secret: crypto.randomUUID().replaceAll('-', ''), events: JSON.stringify(input.events), maxAttempts: input.maxAttempts })
+    } else if (input.action === 'contact:update') {
+      await db.update(contacts).set({ email: input.email.toLowerCase(), displayName: input.displayName || null }).where(and(eq(contacts.id, input.id), eq(contacts.userId, session.user.id)))
+    } else if (input.action === 'template:update') {
+      await db.update(emailTemplates).set({ name: input.name, subject: input.subject, textBody: input.textBody }).where(and(eq(emailTemplates.id, input.id), eq(emailTemplates.userId, session.user.id)))
+    } else if (input.action === 'event:update') {
+      const startsAt = new Date(input.startsAt); const endsAt = new Date(input.endsAt)
+      if (endsAt <= startsAt) return Response.json({ error: 'Event must end after it starts' }, { status: 400 })
+      await db.update(calendarEvents).set({ mailboxId: input.mailboxId, title: input.title, description: input.description, location: input.location, attendees: JSON.stringify(input.attendees), startsAt, endsAt }).where(and(eq(calendarEvents.id, input.id), eq(calendarEvents.userId, session.user.id)))
+    } else if (input.action === 'webhook:update') {
+      await db.update(webhooks).set({ description: input.description || null, url: input.url, events: JSON.stringify(input.events), maxAttempts: input.maxAttempts, enabled: input.enabled }).where(and(eq(webhooks.id, input.id), eq(webhooks.userId, session.user.id)))
     } else {
       const hook = (await db.select().from(webhooks).where(and(eq(webhooks.id, input.id), eq(webhooks.userId, session.user.id))).limit(1)).at(0)
       if (!hook) return new Response('Not found', { status: 404 })

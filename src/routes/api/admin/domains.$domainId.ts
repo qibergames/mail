@@ -46,6 +46,17 @@ export const Route = createFileRoute('/api/admin/domains/$domainId')({
         const details = await loadDomain(params.domainId)
         return details ? Response.json(details) : Response.json({ error: 'Unknown domain' }, { status: 404 })
       },
+      DELETE: async ({ request, params }) => {
+        const session = await requireAdmin(request)
+        const db = getDb()
+        const domain = (await db.select({ id: domains.id, hostname: domains.hostname }).from(domains).where(eq(domains.id, params.domainId)).limit(1)).at(0)
+        if (!domain) return Response.json({ error: 'Unknown domain' }, { status: 404 })
+        if ((await db.select({ id: mailboxes.id }).from(mailboxes).where(eq(mailboxes.domainId, domain.id)).limit(1)).length) return Response.json({ error: 'Delete or move the mailboxes on this domain first' }, { status: 409 })
+        if ((await db.select({ id: mailboxAliases.id }).from(mailboxAliases).where(eq(mailboxAliases.domainId, domain.id)).limit(1)).length) return Response.json({ error: 'Delete the aliases on this domain first' }, { status: 409 })
+        await db.delete(domains).where(eq(domains.id, domain.id))
+        await db.insert(auditLogs).values({ id: newId('log'), actorUserId: session.user.id, action: 'domain:delete', metadata: JSON.stringify({ domainId: domain.id, hostname: domain.hostname }) })
+        return Response.json({ ok: true })
+      },
       POST: async ({ request, params }) => {
         try {
           return await syncDomain(request, params.domainId)

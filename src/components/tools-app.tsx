@@ -1,6 +1,6 @@
 import { Trans, useLingui } from '@lingui/react'
 import type { LucideIcon } from 'lucide-react'
-import { CalendarDays, ContactRound, Download, FileText, FolderOpen, Import, KeyRound, LoaderCircle, Lock, Play, Plus, Server, ShieldCheck, Trash2, Upload, User, Webhook } from 'lucide-react'
+import { CalendarDays, ContactRound, Download, FileText, FolderOpen, Import, KeyRound, LoaderCircle, Lock, Pencil, Play, Plus, Save, Server, ShieldCheck, Trash2, Upload, User, Webhook } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { Status } from './section-ui'
 import { Badge, CheckboxField, EmptyState, Field, Loading, SectionHeader, SelectField, StatusBanner, TextAreaField } from './section-ui'
@@ -11,9 +11,9 @@ import { createImportBatches } from '@/lib/email/import-client'
 type ToolData = {
   contacts: Array<{ id: string; email: string; displayName: string | null; blocked: boolean }>
   templates: Array<{ id: string; name: string; subject: string; textBody: string }>
-  events: Array<{ id: string; title: string; location: string; startsAt: string; endsAt: string }>
+  events: Array<{ id: string; mailboxId: string | null; title: string; description: string; location: string; attendees: string; startsAt: string; endsAt: string }>
   apiKeys: Array<{ id: string; name: string; prefix: string; scopes: string; lastUsedAt: string | null }>
-  webhooks: Array<{ id: string; description: string | null; url: string; events: string; enabled: boolean }>
+  webhooks: Array<{ id: string; description: string | null; url: string; events: string; enabled: boolean; maxAttempts: number }>
   deliveries: Array<{ id: string; webhookId: string; eventType: string; status: string; attempts: number; error: string | null }>
 }
 type Mailbox = { id: string; address: string }
@@ -35,6 +35,7 @@ export function ToolsApp({ section }: { section: ToolsSection }) {
   const [transferMailboxId, setTransferMailboxId] = useState('')
   const [status, setStatus] = useState<Status>(null)
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null)
+  const [editing, setEditing] = useState<{ kind: 'contact' | 'template' | 'event' | 'webhook'; id: string } | null>(null)
 
   async function load() {
     const [tools, boxes] = await Promise.all([fetch('/api/tools'), fetch('/api/mailboxes')])
@@ -48,7 +49,7 @@ export function ToolsApp({ section }: { section: ToolsSection }) {
     const response = await fetch('/api/tools', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     const result = await response.json<{ key?: string; error?: string }>().catch(() => null)
     setStatus(result?.key ? { tone: 'success', text: `${i18n._('Copy this key now')}: ${result.key}` } : response.ok ? { tone: 'success', text: i18n._('Saved') } : { tone: 'error', text: result?.error || i18n._('Save failed') })
-    if (response.ok) { form?.reset(); await load() }
+    if (response.ok) { form?.reset(); setEditing(null); await load() }
   }
   async function remove(kind: string, id: string) {
     if ((await fetch(`/api/tools?kind=${kind}&id=${encodeURIComponent(id)}`, { method: 'DELETE' })).ok) await load()
@@ -85,6 +86,11 @@ export function ToolsApp({ section }: { section: ToolsSection }) {
   if (!data) return <Loading />
 
   const details = sectionDetails[section]
+  const editingContact = editing?.kind === 'contact' ? data.contacts.find((item) => item.id === editing.id) ?? null : null
+  const editingTemplate = editing?.kind === 'template' ? data.templates.find((item) => item.id === editing.id) ?? null : null
+  const editingEvent = editing?.kind === 'event' ? data.events.find((item) => item.id === editing.id) ?? null : null
+  const editingWebhook = editing?.kind === 'webhook' ? data.webhooks.find((item) => item.id === editing.id) ?? null : null
+  const toLocal = (value: string) => { const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16) }
   const count = section === 'contacts' ? data.contacts.length
     : section === 'templates' ? data.templates.length
       : section === 'calendar' ? data.events.length
@@ -101,45 +107,46 @@ export function ToolsApp({ section }: { section: ToolsSection }) {
       {data.contacts.length > 0 && <div className="grid gap-2">
         {data.contacts.map((contact) => <Row key={contact.id} icon={ContactRound} title={contact.displayName || contact.email} meta={contact.displayName ? contact.email : undefined} badges={contact.blocked && <Badge danger><Trans id="blocked" /></Badge>} actions={<>
           <Button size="sm" variant="outline" onClick={() => post({ action: 'contact:block', id: contact.id, blocked: !contact.blocked })}>{contact.blocked ? <Trans id="Unblock" /> : <Trans id="Block" />}</Button>
+          <Edit onClick={() => setEditing({ kind: 'contact', id: contact.id })} />
           <Delete onClick={() => remove('contact', contact.id)} />
         </>} />)}
       </div>}
-      <AddCard title="Add contact">
-        <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'contact:create', email: form.get('email'), displayName: form.get('displayName'), blocked: false }, event.currentTarget) }}>
-          <Field label="Display name" name="displayName" />
-          <Field label="Email" name="email" type="email" required />
-          <div className="flex justify-end sm:col-span-2"><Button><Plus /><Trans id="Add contact" /></Button></div>
+      <AddCard title={editingContact ? 'Edit contact' : 'Add contact'} editing={Boolean(editingContact)}>
+        <form key={editingContact?.id ?? 'new'} className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post(editingContact ? { action: 'contact:update', id: editingContact.id, email: form.get('email'), displayName: form.get('displayName') } : { action: 'contact:create', email: form.get('email'), displayName: form.get('displayName'), blocked: false }, event.currentTarget) }}>
+          <Field label="Display name" name="displayName" defaultValue={editingContact?.displayName ?? ''} />
+          <Field label="Email" name="email" type="email" defaultValue={editingContact?.email ?? ''} required />
+          <SubmitRow editing={Boolean(editingContact)} cancel={() => setEditing(null)} label={editingContact ? 'Save contact' : 'Add contact'} />
         </form>
       </AddCard>
     </>}
 
     {section === 'templates' && <>
       {data.templates.length > 0 && <div className="grid gap-2">
-        {data.templates.map((template) => <Row key={template.id} icon={FileText} title={template.name} meta={template.subject} actions={<Delete onClick={() => remove('template', template.id)} />} />)}
+        {data.templates.map((template) => <Row key={template.id} icon={FileText} title={template.name} meta={template.subject} actions={<><Edit onClick={() => setEditing({ kind: 'template', id: template.id })} /><Delete onClick={() => remove('template', template.id)} /></>} />)}
       </div>}
-      <AddCard title="Add template">
-        <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'template:create', name: form.get('name'), subject: form.get('subject'), textBody: form.get('textBody') }, event.currentTarget) }}>
-          <div className="grid gap-4 sm:grid-cols-2"><Field label="Template name" name="name" required /><Field label="Subject" name="subject" /></div>
-          <TextAreaField label="Message" name="textBody" />
-          <div className="flex justify-end"><Button><Plus /><Trans id="Add template" /></Button></div>
+      <AddCard title={editingTemplate ? 'Edit template' : 'Add template'} editing={Boolean(editingTemplate)}>
+        <form key={editingTemplate?.id ?? 'new'} className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const body = { name: form.get('name'), subject: form.get('subject'), textBody: form.get('textBody') }; void post(editingTemplate ? { action: 'template:update', id: editingTemplate.id, ...body } : { action: 'template:create', ...body }, event.currentTarget) }}>
+          <div className="grid gap-4 sm:grid-cols-2"><Field label="Template name" name="name" defaultValue={editingTemplate?.name ?? ''} required /><Field label="Subject" name="subject" defaultValue={editingTemplate?.subject ?? ''} /></div>
+          <TextAreaField label="Message" name="textBody" defaultValue={editingTemplate?.textBody ?? ''} />
+          <SubmitRow editing={Boolean(editingTemplate)} cancel={() => setEditing(null)} label={editingTemplate ? 'Save template' : 'Add template'} />
         </form>
       </AddCard>
     </>}
 
     {section === 'calendar' && <>
       {data.events.length > 0 && <div className="grid gap-2">
-        {data.events.map((event) => <Row key={event.id} icon={CalendarDays} title={event.title} meta={`${new Date(event.startsAt).toLocaleString(i18n.locale)}${event.location ? ` · ${event.location}` : ''}`} actions={<Delete onClick={() => remove('event', event.id)} />} />)}
+        {data.events.map((event) => <Row key={event.id} icon={CalendarDays} title={event.title} meta={`${new Date(event.startsAt).toLocaleString(i18n.locale)}${event.location ? ` · ${event.location}` : ''}`} actions={<><Edit onClick={() => setEditing({ kind: 'event', id: event.id })} /><Delete onClick={() => remove('event', event.id)} /></>} />)}
       </div>}
-      <AddCard title="Add event">
-        <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const values = (name: string) => String(form.get(name)); void post({ action: 'event:create', mailboxId: form.get('mailboxId') || null, title: form.get('title'), description: form.get('description'), location: form.get('location'), attendees: values('attendees').split(',').map((value) => value.trim()).filter(Boolean), startsAt: new Date(values('startsAt')).toISOString(), endsAt: new Date(values('endsAt')).toISOString() }, event.currentTarget) }}>
-          <Field label="Title" name="title" required />
-          <Field label="Location" name="location" />
-          <Field label="Starts" name="startsAt" type="datetime-local" required />
-          <Field label="Ends" name="endsAt" type="datetime-local" required />
-          <Field label="Attendees" name="attendees" placeholder="a@example.com, b@example.com" />
-          <SelectField label="Mailbox" name="mailboxId" options={[['', '—'], ...mailboxes.map((mailbox) => [mailbox.id, mailbox.address] as [string, string])]} />
-          <TextAreaField label="Description" name="description" className="sm:col-span-2" />
-          <div className="flex justify-end sm:col-span-2"><Button><Plus /><Trans id="Add event" /></Button></div>
+      <AddCard title={editingEvent ? 'Edit event' : 'Add event'} editing={Boolean(editingEvent)}>
+        <form key={editingEvent?.id ?? 'new'} className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const values = (name: string) => String(form.get(name)); const body = { mailboxId: form.get('mailboxId') || null, title: form.get('title'), description: form.get('description'), location: form.get('location'), attendees: values('attendees').split(',').map((value) => value.trim()).filter(Boolean), startsAt: new Date(values('startsAt')).toISOString(), endsAt: new Date(values('endsAt')).toISOString() }; void post(editingEvent ? { action: 'event:update', id: editingEvent.id, ...body } : { action: 'event:create', ...body }, event.currentTarget) }}>
+          <Field label="Title" name="title" defaultValue={editingEvent?.title ?? ''} required />
+          <Field label="Location" name="location" defaultValue={editingEvent?.location ?? ''} />
+          <Field label="Starts" name="startsAt" type="datetime-local" defaultValue={editingEvent ? toLocal(editingEvent.startsAt) : ''} required />
+          <Field label="Ends" name="endsAt" type="datetime-local" defaultValue={editingEvent ? toLocal(editingEvent.endsAt) : ''} required />
+          <Field label="Attendees" name="attendees" placeholder="a@example.com, b@example.com" defaultValue={editingEvent ? (JSON.parse(editingEvent.attendees || '[]') as Array<string>).join(', ') : ''} />
+          <SelectField label="Mailbox" name="mailboxId" defaultValue={editingEvent?.mailboxId ?? ''} options={[['', '—'], ...mailboxes.map((mailbox) => [mailbox.id, mailbox.address] as [string, string])]} />
+          <TextAreaField label="Description" name="description" defaultValue={editingEvent?.description ?? ''} className="sm:col-span-2" />
+          <SubmitRow editing={Boolean(editingEvent)} cancel={() => setEditing(null)} label={editingEvent ? 'Save event' : 'Add event'} />
         </form>
       </AddCard>
     </>}
@@ -161,18 +168,19 @@ export function ToolsApp({ section }: { section: ToolsSection }) {
       {data.webhooks.length > 0 && <div className="grid gap-2">
         {data.webhooks.map((hook) => <Row key={hook.id} icon={Webhook} title={hook.description || hook.url} meta={`${hook.url} · ${(JSON.parse(hook.events) as Array<string>).join(', ')}`} extra={data.deliveries.filter((delivery) => delivery.webhookId === hook.id).slice(0, 1).map((delivery) => <small key={delivery.id} className="mt-1 block text-muted-foreground">{delivery.eventType}: {delivery.status} ({delivery.attempts}) {delivery.error}</small>)} actions={<>
           <Button size="icon" variant="ghost" onClick={() => post({ action: 'webhook:test', id: hook.id })} aria-label={i18n._('Test')} title={i18n._('Test')}><Play /></Button>
+          <Edit onClick={() => setEditing({ kind: 'webhook', id: hook.id })} />
           <Delete onClick={() => remove('webhook', hook.id)} />
         </>} />)}
       </div>}
-      <AddCard title="Add webhook">
-        <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'webhook:create', description: form.get('description'), url: form.get('url'), events: form.getAll('events'), maxAttempts: Number(form.get('maxAttempts')) }, event.currentTarget) }}>
+      <AddCard title={editingWebhook ? 'Edit webhook' : 'Add webhook'} editing={Boolean(editingWebhook)}>
+        <form key={editingWebhook?.id ?? 'new'} className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const body = { description: form.get('description'), url: form.get('url'), events: form.getAll('events'), maxAttempts: Number(form.get('maxAttempts')) }; void post(editingWebhook ? { action: 'webhook:update', id: editingWebhook.id, enabled: form.get('enabled') === 'on', ...body } : { action: 'webhook:create', ...body }, event.currentTarget) }}>
           <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Description" name="description" />
-            <Field label="HTTPS URL" name="url" type="url" required />
-            <Field label="Maximum attempts" name="maxAttempts" type="number" min={1} max={10} defaultValue={5} required />
+            <Field label="Description" name="description" defaultValue={editingWebhook?.description ?? ''} />
+            <Field label="HTTPS URL" name="url" type="url" defaultValue={editingWebhook?.url ?? ''} required />
+            <Field label="Maximum attempts" name="maxAttempts" type="number" min={1} max={10} defaultValue={editingWebhook?.maxAttempts ?? 5} required />
           </div>
-          <div className="flex flex-wrap gap-4"><CheckboxField label="message.received" name="events" value="message.received" /><CheckboxField label="message.sent" name="events" value="message.sent" /></div>
-          <div className="flex justify-end"><Button><Plus /><Trans id="Add webhook" /></Button></div>
+          {(() => { const enabledEvents = editingWebhook ? (JSON.parse(editingWebhook.events) as Array<string>) : ['message.received', 'message.sent']; return <div className="flex flex-wrap gap-4"><CheckboxField label="message.received" name="events" value="message.received" defaultChecked={enabledEvents.includes('message.received')} /><CheckboxField label="message.sent" name="events" value="message.sent" defaultChecked={enabledEvents.includes('message.sent')} />{editingWebhook && <CheckboxField label="Enabled" name="enabled" defaultChecked={editingWebhook.enabled} />}</div> })()}
+          <SubmitRow editing={Boolean(editingWebhook)} cancel={() => setEditing(null)} label={editingWebhook ? 'Save webhook' : 'Add webhook'} />
         </form>
       </AddCard>
     </>}
@@ -250,14 +258,23 @@ function FieldGroup({ title, description, children }: { title: string; descripti
   </div>
 }
 
-function AddCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return <Card className="rounded-2xl">
+function AddCard({ title, editing, children }: { title: string; editing?: boolean; children: React.ReactNode }) {
+  return <Card className={editing ? 'rounded-2xl ring-2 ring-primary/40' : 'rounded-2xl'}>
     <CardHeader className="flex-row items-center gap-3">
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><Plus className="size-5" /></span>
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">{editing ? <Pencil className="size-5" /> : <Plus className="size-5" />}</span>
       <CardTitle className="text-xl"><Trans id={title} /></CardTitle>
     </CardHeader>
     <CardContent>{children}</CardContent>
   </Card>
+}
+
+function Edit({ onClick }: { onClick: () => void }) {
+  const { i18n } = useLingui()
+  return <Button type="button" size="icon" variant="ghost" className="text-muted-foreground" onClick={onClick} aria-label={i18n._('Edit')} title={i18n._('Edit')}><Pencil /></Button>
+}
+
+function SubmitRow({ editing, cancel, label }: { editing: boolean; cancel: () => void; label: string }) {
+  return <div className="flex justify-end gap-2 sm:col-span-2 md:col-span-3">{editing && <Button type="button" variant="outline" onClick={cancel}><Trans id="Cancel" /></Button>}<Button>{editing ? <Save /> : <Plus />}<Trans id={label} /></Button></div>
 }
 
 function Row({ icon: Icon, title, meta, extra, badges, actions }: { icon: LucideIcon; title: string; meta?: string; extra?: React.ReactNode; badges?: React.ReactNode; actions?: React.ReactNode }) {

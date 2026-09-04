@@ -10,6 +10,8 @@ const updateSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('profile'), name: z.string().trim().min(1).max(100), resetEmail: z.email(), forwardingEmail: z.union([z.literal(''), z.email()]) }),
   z.object({ type: z.literal('mailbox'), mailboxId: z.string(), displayName: z.string().trim().max(100), signature: z.string().max(20_000), autoReplyEnabled: z.boolean(), autoReplySubject: z.string().max(998), autoReplyBody: z.string().max(100_000) }),
   z.object({ type: z.literal('folder'), mailboxId: z.string(), name: z.string().trim().min(1).max(80), color: z.string().regex(/^#[0-9a-f]{6}$/i) }),
+  z.object({ type: z.literal('folder:update'), mailboxId: z.string(), folderId: z.string(), name: z.string().trim().min(1).max(80), color: z.string().regex(/^#[0-9a-f]{6}$/i) }),
+  z.object({ type: z.literal('rule:update'), mailboxId: z.string(), ruleId: z.string(), name: z.string().trim().min(1).max(100), matchField: z.enum(['content', 'title', 'sender', 'recipient']), matchOperator: z.enum(['contains', 'exact', 'starts_with', 'ends_with', 'regex']), matchValue: z.string().min(1).max(500), action: z.enum(['store', 'spam', 'trash']), folderId: z.string().nullable() }),
   z.object({ type: z.literal('rule'), mailboxId: z.string(), name: z.string().trim().min(1).max(100), matchField: z.enum(['content', 'title', 'sender', 'recipient']), matchOperator: z.enum(['contains', 'exact', 'starts_with', 'ends_with', 'regex']), matchValue: z.string().min(1).max(500), action: z.enum(['store', 'spam', 'trash']), folderId: z.string().nullable() }),
 ])
 
@@ -75,6 +77,13 @@ export const Route = createFileRoute('/api/settings')({
           }).where(eq(mailboxes.id, owned.id))
         } else if (input.type === 'folder') {
           await db.insert(folders).values({ id: newId('fld'), userId: session.user.id, mailboxId: owned.id, name: input.name, color: input.color })
+        } else if (input.type === 'folder:update') {
+          const updated = await db.update(folders).set({ name: input.name, color: input.color }).where(and(eq(folders.id, input.folderId), eq(folders.mailboxId, owned.id))).returning({ id: folders.id })
+          if (!updated.length) return new Response('Not found', { status: 404 })
+        } else if (input.type === 'rule:update') {
+          if (input.folderId && !(await db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, input.folderId), eq(folders.mailboxId, owned.id))).limit(1)).length) return Response.json({ error: 'Invalid folder' }, { status: 400 })
+          const updated = await db.update(routingRules).set({ name: input.name, pattern: input.matchValue, matchField: input.matchField, matchOperator: input.matchOperator, matchValue: input.matchValue, action: input.action, folderId: input.action === 'store' ? input.folderId : null }).where(and(eq(routingRules.id, input.ruleId), eq(routingRules.mailboxId, owned.id), eq(routingRules.scope, 'mailbox'))).returning({ id: routingRules.id })
+          if (!updated.length) return new Response('Not found', { status: 404 })
         } else {
           if (input.folderId) {
             const validFolder = (await db.select({ id: folders.id }).from(folders).where(and(eq(folders.id, input.folderId), eq(folders.mailboxId, owned.id))).limit(1)).at(0)

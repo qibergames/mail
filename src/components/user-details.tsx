@@ -1,7 +1,7 @@
 import { Trans, useLingui } from '@lingui/react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
-import { ArrowLeft, AtSign, LoaderCircle, Mail, Plus, ScrollText, Star, Trash2, UserRoundCog, Users } from 'lucide-react'
+import { ArrowLeft, AtSign, LoaderCircle, Mail, Plus, ScrollText, Star, Trash2, UserRoundCog, UserRoundX, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { Status } from './section-ui'
 import { Badge, CheckboxField, EmptyState, Field, Loading, SelectField, StatusBanner } from './section-ui'
@@ -19,6 +19,7 @@ type UserDetailsData = {
 
 export function UserDetails({ userId }: { userId: string }) {
   const { i18n } = useLingui()
+  const navigate = useNavigate()
   const [data, setData] = useState<UserDetailsData | null>(null)
   const [missing, setMissing] = useState(false)
   const [status, setStatus] = useState<Status>(null)
@@ -42,13 +43,14 @@ export function UserDetails({ userId }: { userId: string }) {
     setBusy(false)
   }
 
-  async function account(body: unknown) {
+  async function account(body: { action: string; userId: string; [key: string]: unknown }) {
     setBusy(true)
     setStatus(null)
     const response = await fetch('/api/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     const result = await response.json<{ error?: string }>().catch(() => null)
     setStatus(response.ok ? { tone: 'success', text: i18n._('Saved') } : { tone: 'error', text: result?.error || i18n._('Save failed') })
     setBusy(false)
+    if (response.ok && body.action === 'user:delete') { void navigate({ to: '/admin/$section', params: { section: 'accounts' } }); return }
     if (response.ok) await load()
   }
 
@@ -76,6 +78,7 @@ export function UserDetails({ userId }: { userId: string }) {
       <div className="flex shrink-0 gap-2">
         <Button variant="outline" disabled={busy} onClick={() => void account({ action: 'user:role', userId: user.id, role: user.role === 'admin' ? 'user' : 'admin' })}>{user.role === 'admin' ? <Trans id="Make user" /> : <Trans id="Make admin" />}</Button>
         <Button variant="outline" disabled={busy} onClick={() => void account({ action: 'user:ban', userId: user.id, banned: !user.banned })}>{user.banned ? <Trans id="Enable account" /> : <Trans id="Disable account" />}</Button>
+        <Button variant="outline" className="text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400" disabled={busy} onClick={() => { if (confirm(i18n._('Delete this account, its mailboxes and all of their mail? This cannot be undone.'))) void account({ action: 'user:delete', userId: user.id }) }} aria-label={i18n._('Delete account')} title={i18n._('Delete account')}><UserRoundX /><span className="hidden lg:inline"><Trans id="Delete account" /></span></Button>
       </div>
     </div>
     <StatusBanner status={status} />
