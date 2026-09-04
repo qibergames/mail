@@ -27,6 +27,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 16. Import visszajelzés | `done` | Kiemelt, animált importfolyamat százalékkal |
 | 17. Levélolvasó javítások | `done` | Görgethető panelek, sticky műveletsáv és betöltődő képek |
 | 18. Olvasottsági jelzés | `done` | Jól elkülönülő olvasott és olvasatlan levélsorok |
+| 19. Email törzs méretezése | `done` | Szélesebb, tartalommagassághoz igazodó levélnézet |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -229,6 +230,15 @@ Ellenőrzőkapu: TypeScript, ESLint, 16 Bun-teszt és production build.
 
 Eredmény: az olvasott és olvasatlan levelek egy pillantással megkülönböztethetők.
 
+## 19. fázis – Email törzs méretezése `done`
+
+- A HTML-email kerete betöltéskor automatikusan felveszi a tartalom teljes magasságát.
+- Az olvasó szélesebb területet használ, a felesleges belső kártyakeret megszűnt.
+
+Ellenőrzőkapu: TypeScript, ESLint, 16 Bun-teszt és production build.
+
+Eredmény: a levél nem egy kis belső görgetődobozban, hanem természetes méretben jelenik meg.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -255,3 +265,4 @@ Eredmény: az olvasott és olvasatlan levelek egy pillantással megkülönbözte
 - 2026-09-04: 16. fázis lezárva. Az import előkészítése és kötegelt haladása kiemelt folyamatjelzőt kapott.
 - 2026-09-04: 17. fázis lezárva. A levélpanelek scrollja, a sticky műveletsáv és az emailképek megjelenítése javítva.
 - 2026-09-04: 18. fázis lezárva. A levéllista egyértelmű és akadálymentes olvasottsági jelzést kapott.
+- 2026-09-04: 19. fázis lezárva. A HTML-email törzse szélesebb és automatikusan a tartalomhoz igazodik.
