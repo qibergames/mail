@@ -24,6 +24,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 13. MBOX import | `done` | Közvetlen, kötegelt MBOX import deduplikálással |
 | 14. Szekcionált kezelőfelületek | `done` | Külön URL-es oldalak és reszponzív oldalsó navigáció |
 | 15. UI helykihasználás | `done` | Rejtettebb preferenciák és méretezhető levélpanelek |
+| 16. Import visszajelzés | `done` | Kiemelt, animált importfolyamat százalékkal |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -197,6 +198,16 @@ Ellenőrzőkapu: route-generálás, TypeScript, ESLint, 15 Bun-teszt és product
 
 Eredmény: a fejléc felszabadult, az olvasónézet arányai állíthatók, a kezelőoldalak oldalsávja nem fut túl.
 
+## 16. fázis – Import visszajelzés `done`
+
+- Az aktív fájlimport kiemelt színű, animált folyamatkártyát mutat.
+- A kötegszám és százalék folyamatosan látható, az előkészítés külön állapotot kapott.
+- Futó import közben új fájlválasztás nem indítható.
+
+Ellenőrzőkapu: TypeScript, ESLint, 15 Bun-teszt és production build.
+
+Eredmény: az import indulása és előrehaladása többé nem téveszthető össze üres vagy hibás állapottal.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -220,3 +231,4 @@ Eredmény: a fejléc felszabadult, az olvasónézet arányai állíthatók, a ke
 - 2026-09-04: 13. fázis lezárva. A Mailflare-kompatibilis, kötegelt MBOX import elkészült.
 - 2026-09-04: 14. fázis lezárva. A Beállítások, Eszközök és Admin felületek külön aloldalakra kerültek.
 - 2026-09-04: 15. fázis lezárva. A preferenciák külön oldalra kerültek, a levélpanelek méretezhetők és a navigáció túlcsordulása megszűnt.
+- 2026-09-04: 16. fázis lezárva. Az import előkészítése és kötegelt haladása kiemelt folyamatjelzőt kapott.

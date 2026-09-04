@@ -199,6 +199,7 @@ export const messages = {
   'IMAP import': 'IMAP importálás',
   'Message limit': 'Levelek száma',
   Port: 'Port',
+  'Preparing import…': 'Import előkészítése…',
   'Start import': 'Import indítása',
   Skipped: 'Kihagyva',
   Username: 'Felhasználónév',

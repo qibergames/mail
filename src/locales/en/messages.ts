@@ -199,6 +199,7 @@ export const messages = {
   'IMAP import': 'IMAP import',
   'Message limit': 'Message limit',
   Port: 'Port',
+  'Preparing import…': 'Preparing import…',
   'Start import': 'Start import',
   Skipped: 'Skipped',
   Username: 'Username',
