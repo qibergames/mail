@@ -6,7 +6,7 @@ import { getDb } from '@/db'
 import { auditLogs, domains, mailboxAccess, mailboxAliases, mailboxes, routingRules, users } from '@/db/schema'
 import { describeIssues, errorResponse, requireAdmin } from '@/lib/api-auth'
 import { auth } from '@/lib/auth'
-import { createMailboxRoute, deleteMailboxRoute, deleteSendingSubdomain, provisionDomain } from '@/lib/cloudflare-api'
+import { createMailboxRoute, deleteMailboxRoute, deleteMailboxRouteByAddress, deleteSendingSubdomain, provisionDomain } from '@/lib/cloudflare-api'
 import { newId } from '@/lib/ids'
 import { hostnameSchema as hostname, localPartSchema as localPart } from '@/lib/validation'
 
@@ -16,8 +16,13 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('user:ban'), userId: z.string(), banned: z.boolean() }),
   z.object({ action: z.literal('domain:create'), hostname }),
   z.object({ action: z.literal('mailbox:create'), userId: z.string(), domainId: z.string(), localPart, displayName: z.string().trim().max(100), mailboxType: z.enum(['personal', 'shared']) }),
+  z.object({ action: z.literal('mailbox:update'), mailboxId: z.string(), userId: z.string(), displayName: z.string().trim().max(100), mailboxType: z.enum(['personal', 'shared']), disabled: z.boolean() }),
+  z.object({ action: z.literal('mailbox:delete'), mailboxId: z.string() }),
   z.object({ action: z.literal('alias:create'), mailboxId: z.string(), domainId: z.string(), localPart }),
   z.object({ action: z.literal('access:set'), mailboxId: z.string(), userId: z.string(), permission: z.enum(['read_only', 'send_as', 'send_on_behalf', 'full_access']) }),
+  z.object({ action: z.literal('rule:update'), ruleId: z.string(), mailboxId: z.string().nullable(), name: z.string().trim().min(1).max(100), pattern: z.string().min(1).max(500), actionType: z.enum(['store', 'forward', 'reject']), forwardTo: z.union([z.literal(''), z.email()]), keepCopy: z.boolean(), enabled: z.boolean() }),
+  z.object({ action: z.literal('rule:toggle'), ruleId: z.string(), enabled: z.boolean() }),
+  z.object({ action: z.literal('rule:delete'), ruleId: z.string() }),
   z.object({ action: z.literal('rule:create'), domainId: z.string(), mailboxId: z.string().nullable(), name: z.string().trim().min(1).max(100), pattern: z.string().min(1).max(500), actionType: z.enum(['store', 'forward', 'reject']), forwardTo: z.union([z.literal(''), z.email()]), keepCopy: z.boolean() }),
 ])
 
@@ -103,6 +108,16 @@ async function runAdminAction(request: Request, session: Awaited<ReturnType<type
       await deleteMailboxRoute(env, domain.zoneId, rule.id).catch(console.warn)
       throw error
     }
+  } else if (input.action === 'mailbox:update') {
+    if (!(await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1)).length) return Response.json({ error: 'Unknown user' }, { status: 400 })
+    const updated = await db.update(mailboxes).set({ userId: input.userId, displayName: input.displayName || null, type: input.mailboxType, disabled: input.disabled }).where(eq(mailboxes.id, input.mailboxId)).returning({ id: mailboxes.id })
+    if (!updated.length) return Response.json({ error: 'Unknown mailbox' }, { status: 404 })
+  } else if (input.action === 'mailbox:delete') {
+    const mailbox = (await db.select({ id: mailboxes.id, localPart: mailboxes.localPart, hostname: domains.hostname, zoneId: domains.zoneId }).from(mailboxes).innerJoin(domains, eq(mailboxes.domainId, domains.id)).where(eq(mailboxes.id, input.mailboxId)).limit(1)).at(0)
+    if (!mailbox) return Response.json({ error: 'Unknown mailbox' }, { status: 404 })
+    const aliases = await db.select({ localPart: mailboxAliases.localPart, hostname: domains.hostname, zoneId: domains.zoneId }).from(mailboxAliases).innerJoin(domains, eq(mailboxAliases.domainId, domains.id)).where(eq(mailboxAliases.mailboxId, mailbox.id))
+    await db.delete(mailboxes).where(eq(mailboxes.id, mailbox.id))
+    for (const item of [mailbox, ...aliases]) await deleteMailboxRouteByAddress(env, item.zoneId, `${item.localPart}@${item.hostname}`).catch(console.warn)
   } else if (input.action === 'alias:create') {
     const domain = (await db.select().from(domains).where(eq(domains.id, input.domainId)).limit(1)).at(0)
     const mailbox = (await db.select({ id: mailboxes.id }).from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1)).at(0)
@@ -121,6 +136,18 @@ async function runAdminAction(request: Request, session: Awaited<ReturnType<type
     const mailbox = (await db.select({ userId: mailboxes.userId }).from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1)).at(0)
     if (!mailbox || mailbox.userId === input.userId) return Response.json({ error: 'Invalid mailbox access' }, { status: 400 })
     await db.insert(mailboxAccess).values({ id: newId('acc'), mailboxId: input.mailboxId, userId: input.userId, permission: input.permission, createdByUserId: session.user.id }).onConflictDoUpdate({ target: [mailboxAccess.mailboxId, mailboxAccess.userId], set: { permission: input.permission, createdByUserId: session.user.id } })
+  } else if (input.action === 'rule:toggle') {
+    const updated = await db.update(routingRules).set({ enabled: input.enabled }).where(and(eq(routingRules.id, input.ruleId), eq(routingRules.scope, 'domain'))).returning({ id: routingRules.id })
+    if (!updated.length) return Response.json({ error: 'Unknown rule' }, { status: 404 })
+  } else if (input.action === 'rule:delete') {
+    const deleted = await db.delete(routingRules).where(and(eq(routingRules.id, input.ruleId), eq(routingRules.scope, 'domain'))).returning({ id: routingRules.id })
+    if (!deleted.length) return Response.json({ error: 'Unknown rule' }, { status: 404 })
+  } else if (input.action === 'rule:update') {
+    if (input.actionType === 'store' && !input.mailboxId) return Response.json({ error: 'Choose a mailbox to deliver to' }, { status: 400 })
+    if (input.actionType === 'forward' && !input.forwardTo) return Response.json({ error: 'Choose an address to forward to' }, { status: 400 })
+    if (input.mailboxId && !(await db.select({ id: mailboxes.id }).from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1)).length) return Response.json({ error: 'Invalid mailbox' }, { status: 400 })
+    const updated = await db.update(routingRules).set({ mailboxId: input.mailboxId, name: input.name, pattern: input.pattern, matchValue: input.pattern, action: input.actionType, forwardTo: input.actionType === 'forward' ? input.forwardTo : null, keepCopy: input.keepCopy, enabled: input.enabled }).where(and(eq(routingRules.id, input.ruleId), eq(routingRules.scope, 'domain'))).returning({ id: routingRules.id })
+    if (!updated.length) return Response.json({ error: 'Unknown rule' }, { status: 404 })
   } else {
     const domain = (await db.select({ id: domains.id }).from(domains).where(eq(domains.id, input.domainId)).limit(1)).at(0)
     if (!domain) return Response.json({ error: 'Unknown domain' }, { status: 400 })
