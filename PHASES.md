@@ -23,6 +23,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 12. UI finomhangolás | `done` | Shadcn postaláda-select és könnyebb kapcsolók |
 | 13. MBOX import | `done` | Közvetlen, kötegelt MBOX import deduplikálással |
 | 14. Szekcionált kezelőfelületek | `done` | Külön URL-es oldalak és reszponzív oldalsó navigáció |
+| 15. UI helykihasználás | `done` | Rejtettebb preferenciák és méretezhető levélpanelek |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -186,6 +187,16 @@ Ellenőrzőkapu: route-generálás, TypeScript, ESLint, 14 Bun-teszt és product
 
 Eredmény: a korábbi hosszú gyűjtőoldalak helyett Mailflare-szerű, reszponzív szekciónavigáció és külön URL-ek készültek.
 
+## 15. fázis – UI helykihasználás `done`
+
+- A nyelv-, téma- és push értesítési kapcsolók a fejlécből a Beállítások külön aloldalára kerültek.
+- A levéllista és az olvasópanel közötti határ egérrel, érintéssel és nyílbillentyűkkel méretezhető; a választott szélesség helyben megmarad.
+- A szekciónavigáció hosszú elemei tördelődnek, mobilon több sorba rendeződnek, ezért nincs vízszintes görgetés.
+
+Ellenőrzőkapu: route-generálás, TypeScript, ESLint, 15 Bun-teszt és production build.
+
+Eredmény: a fejléc felszabadult, az olvasónézet arányai állíthatók, a kezelőoldalak oldalsávja nem fut túl.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -208,3 +219,4 @@ Eredmény: a korábbi hosszú gyűjtőoldalak helyett Mailflare-szerű, reszponz
 - 2026-09-04: 12. fázis lezárva. A postaláda-választó és a fejléc kapcsolói shadcn stílusra lettek finomítva.
 - 2026-09-04: 13. fázis lezárva. A Mailflare-kompatibilis, kötegelt MBOX import elkészült.
 - 2026-09-04: 14. fázis lezárva. A Beállítások, Eszközök és Admin felületek külön aloldalakra kerültek.
+- 2026-09-04: 15. fázis lezárva. A preferenciák külön oldalra kerültek, a levélpanelek méretezhetők és a navigáció túlcsordulása megszűnt.

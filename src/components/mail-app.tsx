@@ -23,14 +23,12 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { LocaleToggle } from './locale-toggle'
-import { PushToggle } from './push-toggle'
-import { ThemeToggle } from './theme-toggle'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { authClient } from '@/lib/auth-client'
+import { clampMessageListWidth } from '@/lib/mail-layout'
 import { cn } from '@/lib/utils'
 
 export type MailView = 'inbox' | 'sent' | 'drafts' | 'starred' | 'snoozed' | 'archived' | 'spam' | 'trash'
@@ -80,6 +78,9 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   const [composer, setComposer] = useState<Draft | null>(null)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [refresh, setRefresh] = useState(0)
+  const [listWidth, setListWidth] = useState(416)
+  const listWidthRef = useRef(416)
+  const splitRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     void fetch('/api/mailboxes').then((response) => response.json<Array<Mailbox>>()).then((rows) => {
@@ -131,6 +132,20 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
     return () => socket.close()
   }, [])
 
+  useEffect(() => {
+    const stored = localStorage.getItem('qibermail-message-list-width')
+    const saved = stored === null ? listWidthRef.current : Number(stored)
+    if (Number.isFinite(saved)) listWidthRef.current = saved
+    const fit = () => {
+      const width = clampMessageListWidth(listWidthRef.current, splitRef.current?.getBoundingClientRect().width ?? window.innerWidth)
+      listWidthRef.current = width
+      setListWidth(width)
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [])
+
   async function selectMessage(message: Message) {
     const response = await fetch(`/api/messages/${message.id}`)
     if (!response.ok) return
@@ -164,6 +179,18 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   async function logout() {
     await authClient.signOut()
     location.assign('/login')
+  }
+
+  function resizeList(clientX: number) {
+    const rect = splitRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const width = clampMessageListWidth(clientX - rect.left, rect.width)
+    listWidthRef.current = width
+    setListWidth(width)
+  }
+
+  function saveListWidth() {
+    localStorage.setItem('qibermail-message-list-width', String(listWidthRef.current))
   }
 
   return (
@@ -202,12 +229,9 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
             <form className="flex min-w-0 flex-1" onSubmit={(event) => { event.preventDefault(); setSearch(query) }}>
               <div className="flex h-11 min-w-0 flex-1 items-center gap-3 rounded-full bg-muted px-4"><Search className="size-5 text-muted-foreground" /><Input className="h-auto border-0 p-0 shadow-none focus-visible:ring-0" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={i18n._('Search mail')} /></div>
             </form>
-            <PushToggle />
-            <div className="hidden sm:block"><LocaleToggle /></div>
-            <div className="hidden lg:block"><ThemeToggle /></div>
           </header>
 
-          <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(18rem,26rem)_minmax(0,1fr)]">
+          <div ref={splitRef} className="grid min-h-0 flex-1 md:grid-cols-[var(--message-list-width)_0_minmax(0,1fr)]" style={{ '--message-list-width': `${listWidth}px` } as React.CSSProperties}>
             <section className={cn('min-h-0 overflow-y-auto border-r', selected && 'hidden md:block')}>
               <div className="flex h-14 items-center gap-1 border-b px-4">
                 {selectedIds.length ? <><span className="mr-2 text-sm">{selectedIds.length}</span><Button variant="ghost" size="icon" onClick={() => bulk({ read: true })} aria-label={i18n._('Mark read')}><Mail /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'archived' })} aria-label={i18n._('Archive')}><Archive /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'trash' })} aria-label={i18n._('Delete')}><Trash2 /></Button></> : <><h1 className="font-semibold">{folderId ? folders.find((folder) => folder.id === folderId)?.name : <Trans id={navigation.find((item) => item.view === view)?.label ?? 'Inbox'} />}</h1><span className="ml-auto text-sm text-muted-foreground">{messages.length}</span></>}
@@ -216,6 +240,29 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
               {!loading && messages.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground"><Trans id="No messages here." /></p>}
               {messages.map((message) => <div key={message.id} className={cn('flex border-b hover:bg-muted/70', !message.read && 'bg-primary/5', selected?.id === message.id && 'bg-secondary')}><label className="grid w-11 shrink-0 place-items-center"><input type="checkbox" checked={selectedIds.includes(message.id)} onChange={(event) => setSelectedIds((ids) => event.target.checked ? [...ids, message.id] : ids.filter((id) => id !== message.id))} aria-label={i18n._('Select')} /></label><button type="button" onClick={() => selectMessage(message)} className="grid min-w-0 flex-1 grid-cols-[1fr_auto] gap-2 p-4 pl-0 text-left"><span className="min-w-0"><span className={cn('block truncate text-sm', !message.read && 'font-semibold')}>{view === 'sent' ? message.toAddr : message.fromAddr}</span><span className="mt-1 block truncate text-sm font-medium">{message.subject || i18n._('(No subject)')}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{message.snippet}</span></span><span className="text-xs text-muted-foreground">{new Date(message.createdAt).toLocaleDateString(i18n.locale)}</span></button></div>)}
             </section>
+
+            <button
+              type="button"
+              role="separator"
+              aria-label={i18n._('Resize message list')}
+              aria-orientation="vertical"
+              aria-valuemin={288}
+              aria-valuemax={1600}
+              aria-valuenow={Math.round(listWidth)}
+              className="group relative z-10 hidden h-full w-3 -translate-x-1/2 cursor-col-resize touch-none focus-visible:outline-none md:block"
+              onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
+              onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) resizeList(event.clientX) }}
+              onPointerUp={(event) => { event.currentTarget.releasePointerCapture(event.pointerId); saveListWidth() }}
+              onPointerCancel={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+                event.preventDefault()
+                const width = clampMessageListWidth(listWidthRef.current + (event.key === 'ArrowLeft' ? -24 : 24), splitRef.current?.getBoundingClientRect().width ?? window.innerWidth)
+                listWidthRef.current = width
+                setListWidth(width)
+                saveListWidth()
+              }}
+            ><span className="absolute inset-y-0 left-1/2 w-px bg-border group-hover:bg-primary group-focus-visible:w-0.5 group-focus-visible:bg-primary" /></button>
 
             <section className={cn('min-h-0 overflow-y-auto', !selected && 'hidden md:block')}>
               {selected ? (

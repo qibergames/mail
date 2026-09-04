@@ -1,6 +1,9 @@
 import { Trans, useLingui } from '@lingui/react'
 import { LoaderCircle, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { LocaleToggle } from './locale-toggle'
+import { PushToggle } from './push-toggle'
+import { ThemeToggle } from './theme-toggle'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Input } from './ui/input'
@@ -13,7 +16,7 @@ type Settings = {
   rules: Array<{ id: string; mailboxId: string | null; name: string | null; matchField: string; matchOperator: string; matchValue: string; action: string; folderId: string | null }>
 }
 
-export function SettingsApp({ section }: { section: 'profile' | 'mailboxes' | 'folders' | 'rules' }) {
+export function SettingsApp({ section }: { section: 'profile' | 'appearance' | 'mailboxes' | 'folders' | 'rules' }) {
   const { i18n } = useLingui()
   const [data, setData] = useState<Settings | null>(null)
   const [message, setMessage] = useState('')
@@ -54,7 +57,16 @@ export function SettingsApp({ section }: { section: 'profile' | 'mailboxes' | 'f
           </CardContent>
       </Card>}
 
-      {section !== 'profile' && data.mailboxes.map((mailbox) => {
+      {section === 'appearance' && <Card>
+        <CardHeader><CardTitle><Trans id="Appearance and notifications" /></CardTitle><CardDescription><Trans id="Language, theme and push notification preferences." /></CardDescription></CardHeader>
+        <CardContent className="grid gap-2">
+          <Preference label="Language"><LocaleToggle /></Preference>
+          <Preference label="Theme"><ThemeToggle /></Preference>
+          <Preference label="Push notifications"><PushToggle /></Preference>
+        </CardContent>
+      </Card>}
+
+      {!['profile', 'appearance'].includes(section) && data.mailboxes.map((mailbox) => {
           const boxFolders = data.folders.filter((folder) => folder.mailboxId === mailbox.id)
           const boxRules = data.rules.filter((rule) => rule.mailboxId === mailbox.id)
           return (
@@ -95,6 +107,10 @@ export function SettingsApp({ section }: { section: 'profile' | 'mailboxes' | 'f
         })}
     </>
   )
+}
+
+function Preference({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="flex min-h-14 items-center gap-4 rounded-lg border px-4"><span className="font-medium"><Trans id={label} /></span><div className="ml-auto">{children}</div></div>
 }
 
 function PasswordForm() {
