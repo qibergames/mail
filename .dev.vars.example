@@ -1,0 +1,19 @@
+# Better Auth
+BETTER_AUTH_SECRET=replace_with_at_least_32_random_bytes
+BETTER_AUTH_URL=http://localhost:3000
+
+# Cloudflare Email Routing and DNS API
+CF_TOKEN=replace_with_scoped_cloudflare_api_token
+# Or use the legacy pair instead of CF_TOKEN:
+# CF_EMAIL=admin@example.com
+# CF_API_KEY=replace_with_global_api_key
+CF_EMAIL_WORKER_NAME=qibermail
+
+# Cloudflare Turnstile
+TURNSTILE_SECRET_KEY=replace_with_turnstile_secret
+VITE_TURNSTILE_SITE_KEY=replace_with_turnstile_site_key
+
+# Web Push
+VAPID_SUBJECT=mailto:admin@example.com
+VAPID_PUBLIC_KEY=replace_with_vapid_public_key
+VAPID_PRIVATE_KEY=replace_with_vapid_private_key

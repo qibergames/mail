@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1788530271827,
+      "tag": "0000_friendly_vampiro",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788530875429,
+      "tag": "0001_silent_rhodey",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788533607722,
+      "tag": "0002_lyrical_the_twelve",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `messages_raw_r2_key_idx` ON `messages` (`raw_r2_key`);
