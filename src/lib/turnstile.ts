@@ -1,5 +1,3 @@
-import { newId } from './ids'
-
 type TurnstileResult = { success: boolean; 'error-codes'?: string[] }
 
 export type TurnstileVerification = { success: boolean; errorCodes: string[] }
@@ -21,7 +19,6 @@ export async function verifyTurnstile(request: Request, token: unknown): Promise
         secret,
         response: token,
         remoteip: request.headers.get('cf-connecting-ip') ?? undefined,
-        idempotency_key: newId('ts'),
       }),
     })
     const result = await response.json<TurnstileResult>()

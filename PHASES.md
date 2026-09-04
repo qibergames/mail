@@ -19,6 +19,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 8. Stabilizálás | `done` | 12 teszt, friss-D1 próba, build és deploy dry-run |
 | 9. Éles helyreállítás | `done` | D1 migráció, runtime Turnstile és production smoke |
 | 10. Setup diagnosztika | `done` | Siteverify hibakódok és automatikus token-reset |
+| 11. Turnstile lifecycle | `done` | Lejárat-, timeout- és újrapróbálkozás-kezelés |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -143,6 +144,16 @@ Ellenőrzőkapu: TypeScript, ESLint, 12 Bun-teszt és production build.
 
 Eredmény: minden ellenőrzés zöld; a következő éles próbálkozás már pontos okot mutat a generikus hiba helyett.
 
+## 11. fázis – Turnstile lifecycle `done`
+
+- Lejáratkor és challenge timeoutnál a kliens törli a régi tokent és reseteli a widgetet.
+- Sikertelen setup után továbbra is új widget készül, így egyszer használható token nem kerül újraküldésre.
+- A retry nélküli Siteverify kérés fölösleges idempotency kulcsa kikerült.
+
+Ellenőrzőkapu: TypeScript, ESLint, 12 Bun-teszt és production build.
+
+Eredmény: a `timeout-or-duplicate` gyökérok kliensoldali kezelése elkészült, minden ellenőrzés zöld.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -161,3 +172,4 @@ Eredmény: minden ellenőrzés zöld; a következő éles próbálkozás már po
 - 2026-09-04: 8. fázis helyi kapui lezárva. 12/12 teszt, TypeScript, lint, build, friss D1 és Wrangler dry-run sikeres; éles account/telefon validáció `pending_external`.
 - 2026-09-04: 9. fázis lezárva. A hiányzó production D1 migráció és a Turnstile build/runtime eltérés javítva; az éles setup smoke zöld.
 - 2026-09-04: 10. fázis lezárva. A setup és Turnstile hibák biztonságosan diagnosztizálhatók, a felhasznált token automatikusan megújul.
+- 2026-09-04: 11. fázis lezárva. A Turnstile lejárat/timeout callbackjei és token-reset bekerültek.

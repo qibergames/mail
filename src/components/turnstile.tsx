@@ -3,8 +3,15 @@ import { useEffect, useRef } from 'react'
 declare global {
   interface Window {
     turnstile?: {
-      render: (element: HTMLElement, options: { sitekey: string; callback: (token: string) => void }) => string
+      render: (element: HTMLElement, options: {
+        sitekey: string
+        callback: (token: string) => void
+        'error-callback': () => void
+        'expired-callback': () => void
+        'timeout-callback': () => void
+      }) => string
       remove: (id: string) => void
+      reset: (id: string) => void
     }
   }
 }
@@ -17,9 +24,20 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
     let script: HTMLScriptElement | undefined
     let widgetId: string | undefined
 
+    const reset = () => {
+      onToken('')
+      if (widgetId) window.turnstile?.reset(widgetId)
+    }
+
     const render = (siteKey: string) => {
       if (container.current && window.turnstile) {
-        widgetId = window.turnstile.render(container.current, { sitekey: siteKey, callback: onToken })
+        widgetId = window.turnstile.render(container.current, {
+          sitekey: siteKey,
+          callback: onToken,
+          'error-callback': () => onToken(''),
+          'expired-callback': reset,
+          'timeout-callback': reset,
+        })
       }
     }
 
