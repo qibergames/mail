@@ -25,6 +25,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 14. Szekcionált kezelőfelületek | `done` | Külön URL-es oldalak és reszponzív oldalsó navigáció |
 | 15. UI helykihasználás | `done` | Rejtettebb preferenciák és méretezhető levélpanelek |
 | 16. Import visszajelzés | `done` | Kiemelt, animált importfolyamat százalékkal |
+| 17. Levélolvasó javítások | `done` | Görgethető panelek, sticky műveletsáv és betöltődő képek |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -208,6 +209,16 @@ Ellenőrzőkapu: TypeScript, ESLint, 15 Bun-teszt és production build.
 
 Eredmény: az import indulása és előrehaladása többé nem téveszthető össze üres vagy hibás állapottal.
 
+## 17. fázis – Levélolvasó javítások `done`
+
+- A levéllista és a sidebar a rendelkezésre álló magasságon belül marad és külön görgethető.
+- A levél műveletsávja Gmail-szerűen teljes szélességű, felül rögzített és vissza gombot kapott.
+- A HTTPS-es távoli képek és a CID-alapú inline csatolmányképek megjelennek a sandboxolt levélnézetben.
+
+Ellenőrzőkapu: TypeScript, ESLint, 16 Bun-teszt és production build.
+
+Eredmény: a hosszú levéllista nem vágja le a sidebar alját, az olvasóműveletek görgetés közben elérhetők, és az emailképek betöltődnek.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -232,3 +243,4 @@ Eredmény: az import indulása és előrehaladása többé nem téveszthető ös
 - 2026-09-04: 14. fázis lezárva. A Beállítások, Eszközök és Admin felületek külön aloldalakra kerültek.
 - 2026-09-04: 15. fázis lezárva. A preferenciák külön oldalra kerültek, a levélpanelek méretezhetők és a navigáció túlcsordulása megszűnt.
 - 2026-09-04: 16. fázis lezárva. Az import előkészítése és kötegelt haladása kiemelt folyamatjelzőt kapott.
+- 2026-09-04: 17. fázis lezárva. A levélpanelek scrollja, a sticky műveletsáv és az emailképek megjelenítése javítva.

@@ -20,6 +20,7 @@ export const messages = {
   'Automatic reply subject': 'Automatic reply subject',
   'Appearance and notifications': 'Appearance and notifications',
   'Back to inbox': 'Back to inbox',
+  'Back to message list': 'Back to message list',
   'Back to sign in': 'Back to sign in',
   'Change password': 'Change password',
   'Choose a new password': 'Choose a new password',

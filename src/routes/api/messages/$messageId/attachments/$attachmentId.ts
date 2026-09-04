@@ -12,5 +12,6 @@ export const Route = createFileRoute('/api/messages/$messageId/attachments/$atta
   if (!row?.mailboxId || !(await accessibleMailboxIds(session.user.id)).includes(row.mailboxId)) return new Response('Not found', { status: 404 })
   const object = await env.BUCKET.get(row.attachment.r2Key)
   if (!object) return new Response('Not found', { status: 404 })
-  return new Response(object.body, { headers: { 'Content-Type': row.attachment.contentType, 'Content-Length': String(row.attachment.size), 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(row.attachment.filename)}`, 'Cache-Control': 'private, no-store' } })
+  const preview = new URL(request.url).searchParams.get('preview') === '1' && row.attachment.contentType.startsWith('image/')
+  return new Response(object.body, { headers: { 'Content-Type': row.attachment.contentType, 'Content-Length': String(row.attachment.size), 'Content-Disposition': `${preview ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(row.attachment.filename)}`, 'Cache-Control': 'private, no-store', 'Content-Security-Policy': "default-src 'none'; sandbox", 'X-Content-Type-Options': 'nosniff' } })
 } } } })

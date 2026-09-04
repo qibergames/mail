@@ -20,6 +20,7 @@ export const messages = {
   'Automatic reply subject': 'Automatikus válasz tárgya',
   'Appearance and notifications': 'Megjelenés és értesítések',
   'Back to inbox': 'Vissza a beérkezettekhez',
+  'Back to message list': 'Vissza a levéllistához',
   'Back to sign in': 'Vissza a bejelentkezéshez',
   'Change password': 'Jelszó módosítása',
   'Choose a new password': 'Válassz új jelszót',

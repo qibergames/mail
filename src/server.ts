@@ -49,7 +49,7 @@ export default {
     }
     const response = await app.fetch(request)
     const headers = new Headers(response.headers)
-    headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss: https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
+    headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
     headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
     headers.set('X-Content-Type-Options', 'nosniff')
     headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')

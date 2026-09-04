@@ -2,6 +2,7 @@ import { Trans, useLingui } from '@lingui/react'
 import { Link } from '@tanstack/react-router'
 import {
   Archive,
+  ArrowLeft,
   CalendarClock,
   CornerUpLeft,
   FileText,
@@ -28,6 +29,7 @@ import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { authClient } from '@/lib/auth-client'
+import { resolveInlineImages } from '@/lib/email/html'
 import { clampMessageListWidth } from '@/lib/mail-layout'
 import { cn } from '@/lib/utils'
 
@@ -48,7 +50,7 @@ type Message = {
   starred: boolean
   createdAt: string
 }
-type Attachment = { id: string; filename: string; contentType: string; size: number }
+type Attachment = { id: string; filename: string; contentType: string; size: number; contentId: string | null }
 type Draft = { id?: string; to?: string; subject?: string; text?: string }
 
 const navigation = [
@@ -196,7 +198,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   return (
     <main className="h-dvh overflow-hidden bg-muted p-0 md:p-4">
       <section className="mx-auto grid h-full max-w-[1600px] grid-cols-1 overflow-hidden bg-background md:grid-cols-[16rem_minmax(0,1fr)] md:rounded-3xl md:border md:shadow-xl">
-        <aside className={cn('absolute inset-y-0 left-0 z-30 flex w-64 -translate-x-full flex-col gap-5 bg-sidebar p-4 transition-transform md:static md:translate-x-0', mobileMenu && 'translate-x-0')}>
+        <aside className={cn('absolute inset-y-0 left-0 z-30 flex min-h-0 w-64 -translate-x-full flex-col gap-5 overflow-y-auto bg-sidebar p-4 transition-transform md:static md:translate-x-0', mobileMenu && 'translate-x-0')}>
           <div className="flex items-center gap-3 px-2 text-xl font-semibold"><span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground"><Mail /></span>QiberMail</div>
           <Button className="h-12 justify-start rounded-2xl px-5" onClick={() => setComposer({})}><Mail /><Trans id="Compose" /></Button>
           <nav className="grid gap-1" aria-label={i18n._('Mail folders')}>
@@ -223,7 +225,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-col">
           <header className="flex h-16 shrink-0 items-center gap-2 border-b px-3 md:px-5">
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileMenu((open) => !open)} aria-label={i18n._('Menu')}><Menu /></Button>
             <form className="flex min-w-0 flex-1" onSubmit={(event) => { event.preventDefault(); setSearch(query) }}>
@@ -231,8 +233,8 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
             </form>
           </header>
 
-          <div ref={splitRef} className="grid min-h-0 flex-1 md:grid-cols-[var(--message-list-width)_0_minmax(0,1fr)]" style={{ '--message-list-width': `${listWidth}px` } as React.CSSProperties}>
-            <section className={cn('min-h-0 overflow-y-auto border-r', selected && 'hidden md:block')}>
+          <div ref={splitRef} className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden md:grid-cols-[var(--message-list-width)_0_minmax(0,1fr)]" style={{ '--message-list-width': `${listWidth}px` } as React.CSSProperties}>
+            <section className={cn('h-full min-h-0 overflow-y-auto border-r', selected && 'hidden md:block')}>
               <div className="flex h-14 items-center gap-1 border-b px-4">
                 {selectedIds.length ? <><span className="mr-2 text-sm">{selectedIds.length}</span><Button variant="ghost" size="icon" onClick={() => bulk({ read: true })} aria-label={i18n._('Mark read')}><Mail /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'archived' })} aria-label={i18n._('Archive')}><Archive /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'trash' })} aria-label={i18n._('Delete')}><Trash2 /></Button></> : <><h1 className="font-semibold">{folderId ? folders.find((folder) => folder.id === folderId)?.name : <Trans id={navigation.find((item) => item.view === view)?.label ?? 'Inbox'} />}</h1><span className="ml-auto text-sm text-muted-foreground">{messages.length}</span></>}
               </div>
@@ -264,22 +266,24 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
               }}
             ><span className="absolute inset-y-0 left-1/2 w-px bg-border group-hover:bg-primary group-focus-visible:w-0.5 group-focus-visible:bg-primary" /></button>
 
-            <section className={cn('min-h-0 overflow-y-auto', !selected && 'hidden md:block')}>
+            <section className={cn('h-full min-h-0 overflow-y-auto', !selected && 'hidden md:block')}>
               {selected ? (
-                <article className="mx-auto max-w-3xl p-4 md:p-8">
-                  <div className="mb-5 flex items-center gap-2">
-                    <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSelected(null)} aria-label={i18n._('Close')}><X /></Button>
+                <>
+                  <div className="sticky top-0 z-10 flex min-h-16 items-center gap-1 border-b bg-background/95 px-3 backdrop-blur md:px-5">
+                    <Button variant="ghost" size="icon" onClick={() => setSelected(null)} aria-label={i18n._('Back to message list')}><ArrowLeft /></Button>
                     <Button variant="ghost" size="icon" aria-label={i18n._('Star')} onClick={() => updateMessage(selected.id, { starred: !selected.starred })}><Star className={selected.starred ? 'fill-yellow-400 text-yellow-500' : ''} /></Button>
                     <Button variant="ghost" size="icon" aria-label={i18n._('Archive')} onClick={() => updateMessage(selected.id, { status: 'archived' })}><Archive /></Button>
                     <Button variant="ghost" size="icon" aria-label={i18n._('Snooze one day')} onClick={() => fetch(`/api/messages/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snoozedUntil: new Date(Date.now() + 86_400_000).toISOString() }) }).then(() => setRefresh((value) => value + 1))}><CalendarClock /></Button>
                     <Button variant="ghost" size="icon" aria-label={i18n._('Delete')} onClick={() => updateMessage(selected.id, { status: 'trash' })}><Trash2 /></Button>
                     {selected.status === 'draft' ? <Button className="ml-auto" onClick={() => setComposer({ id: selected.id, to: selected.toAddr, subject: selected.subject ?? '', text: selected.textBody ?? '' })}><Trans id="Edit draft" /></Button> : <><Button className="ml-auto" variant="outline" onClick={() => setComposer({ to: recipient(selected.fromAddr), subject: selected.subject?.startsWith('Re:') ? selected.subject : `Re: ${selected.subject ?? ''}`, text: `\n\n---\n${selected.textBody ?? ''}` })}><CornerUpLeft /><Trans id="Reply" /></Button><Button variant="outline" onClick={() => setComposer({ subject: selected.subject?.startsWith('Fwd:') ? selected.subject : `Fwd: ${selected.subject ?? ''}`, text: `\n\n---\n${selected.textBody ?? ''}` })}><Forward /><Trans id="Forward" /></Button></>}
                   </div>
+                <article className="mx-auto max-w-3xl p-4 md:p-8">
                   <h2 className="text-2xl font-semibold">{selected.subject || i18n._('(No subject)')}</h2>
                   <div className="mt-6 text-sm"><strong>{selected.fromAddr}</strong><div className="text-muted-foreground"><Trans id="To" />: {selected.toAddr}</div></div>
-                  {selected.htmlBody ? <iframe title={i18n._('Message content')} sandbox="" referrerPolicy="no-referrer" className="mt-8 min-h-96 w-full rounded-md border bg-white" srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: cid:">${selected.htmlBody}`} /> : <pre className="mt-8 whitespace-pre-wrap break-words font-sans text-sm leading-7">{selected.textBody || i18n._('This message has no plain-text body.')}</pre>}
+                  {selected.htmlBody ? <iframe title={i18n._('Message content')} sandbox="allow-same-origin" referrerPolicy="no-referrer" className="mt-8 min-h-96 w-full rounded-md border bg-white" srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:">${resolveInlineImages(selected.htmlBody, selected.id, selectedAttachments)}`} /> : <pre className="mt-8 whitespace-pre-wrap break-words font-sans text-sm leading-7">{selected.textBody || i18n._('This message has no plain-text body.')}</pre>}
                   {selectedAttachments.length > 0 && <div className="mt-8 flex flex-wrap gap-2">{selectedAttachments.map((attachment) => <a key={attachment.id} className="rounded-md border px-3 py-2 text-sm hover:bg-muted" href={`/api/messages/${selected.id}/attachments/${attachment.id}`}>{attachment.filename} · {(attachment.size / 1024).toFixed(0)} KB</a>)}</div>}
                 </article>
+                </>
               ) : <div className="grid h-full place-items-center text-sm text-muted-foreground"><Trans id="Select a message to read it." /></div>}
             </section>
           </div>
