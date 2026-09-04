@@ -1,6 +1,6 @@
 import { Trans, useLingui } from '@lingui/react'
 import type { LucideIcon } from 'lucide-react'
-import { CalendarDays, ContactRound, Download, FileText, Import, KeyRound, LoaderCircle, Play, Plus, Trash2, Upload, Webhook } from 'lucide-react'
+import { CalendarDays, ContactRound, Download, FileText, FolderOpen, Import, KeyRound, LoaderCircle, Lock, Play, Plus, Server, ShieldCheck, Trash2, Upload, User, Webhook } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { Status } from './section-ui'
 import { Badge, CheckboxField, EmptyState, Field, Loading, SectionHeader, SelectField, StatusBanner, TextAreaField } from './section-ui'
@@ -196,18 +196,33 @@ export function ToolsApp({ section }: { section: ToolsSection }) {
       <Card className="rounded-2xl">
         <CardHeader className="flex-row items-center gap-3">
           <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground"><Upload className="size-5" /></span>
-          <div><CardTitle className="text-xl"><Trans id="IMAP import" /></CardTitle><CardDescription><Trans id="Credentials are used only for this import and are never stored." /></CardDescription></div>
+          <div><CardTitle className="text-xl"><Trans id="IMAP import" /></CardTitle><CardDescription><Trans id="Copy messages from another account into your mailbox." /></CardDescription></div>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4 md:grid-cols-3" onSubmit={async (event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const response = await fetch('/api/import/imap', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mailboxId: form.get('mailboxId'), host: form.get('host'), port: Number(form.get('port')), username: form.get('username'), password: form.get('password'), folder: form.get('folder'), limit: Number(form.get('limit')) }) }); const result = await response.json<{ imported?: number; error?: string }>().catch(() => null); setStatus(response.ok ? { tone: 'success', text: `${i18n._('Import complete')}: ${result?.imported ?? 0}` } : { tone: 'error', text: result?.error || i18n._('Import failed') }); if (response.ok) event.currentTarget.reset() }}>
-            <SelectField label="Mailbox" name="mailboxId" options={mailboxes.map((mailbox) => [mailbox.id, mailbox.address] as [string, string])} />
-            <Field label="IMAP host" name="host" placeholder="imap.example.com" required />
-            <Field label="Port" name="port" type="number" min={1} max={65535} defaultValue={993} required />
-            <Field label="Username" name="username" autoComplete="username" required />
-            <Field label="Password" name="password" type="password" autoComplete="current-password" required />
-            <Field label="Folder" name="folder" defaultValue="INBOX" required />
-            <Field label="Message limit" name="limit" type="number" min={1} max={200} defaultValue={50} required />
-            <div className="flex items-end justify-end md:col-span-2"><Button><Upload /><Trans id="Start import" /></Button></div>
+          <form className="grid gap-6" onSubmit={async (event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const response = await fetch('/api/import/imap', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mailboxId: form.get('mailboxId'), host: form.get('host'), port: Number(form.get('port')), username: form.get('username'), password: form.get('password'), folder: form.get('folder'), limit: Number(form.get('limit')) }) }); const result = await response.json<{ imported?: number; error?: string }>().catch(() => null); setStatus(response.ok ? { tone: 'success', text: `${i18n._('Import complete')}: ${result?.imported ?? 0}` } : { tone: 'error', text: result?.error || i18n._('Import failed') }); if (response.ok) event.currentTarget.reset() }}>
+            <FieldGroup title="Connection" description="The IMAP server of the source account.">
+              <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+                <Field label="IMAP host" name="host" icon={Server} placeholder="imap.example.com" required />
+                <Field label="Port" name="port" type="number" min={1} max={65535} defaultValue={993} required />
+              </div>
+            </FieldGroup>
+            <FieldGroup title="Sign in" description="Credentials of the source account.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Username" name="username" icon={User} autoComplete="username" required />
+                <Field label="Password" name="password" icon={Lock} type="password" autoComplete="current-password" required />
+              </div>
+            </FieldGroup>
+            <FieldGroup title="Destination" description="Where the imported messages go.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SelectField label="Mailbox" name="mailboxId" className="sm:col-span-2" options={mailboxes.map((mailbox) => [mailbox.id, mailbox.address] as [string, string])} />
+                <Field label="Folder" name="folder" icon={FolderOpen} defaultValue="INBOX" required />
+                <Field label="Message limit" name="limit" type="number" min={1} max={200} defaultValue={50} required />
+              </div>
+            </FieldGroup>
+            <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center">
+              <p className="flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-4 shrink-0 text-emerald-500" /><Trans id="Credentials are used only for this import and are never stored." /></p>
+              <Button className="sm:ml-auto"><Upload /><Trans id="Start import" /></Button>
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -222,6 +237,16 @@ function ImportProgress({ current, total }: { current: number; total: number }) 
     <div role="progressbar" aria-label="Import" aria-valuemin={0} aria-valuemax={100} aria-valuenow={total ? percent : undefined} className="mt-3 h-2 overflow-hidden rounded-full bg-primary/20">
       <div className={`h-full rounded-full bg-primary transition-[width] duration-300 ${total ? '' : 'w-1/3 animate-pulse'}`} style={total ? { width: `${percent}%` } : undefined} />
     </div>
+  </div>
+}
+
+function FieldGroup({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return <div className="grid gap-3 md:grid-cols-[13rem_1fr] md:gap-8">
+    <div>
+      <h3 className="text-sm font-semibold"><Trans id={title} /></h3>
+      <p className="mt-0.5 text-xs text-muted-foreground"><Trans id={description} /></p>
+    </div>
+    <div className="min-w-0">{children}</div>
   </div>
 }
 

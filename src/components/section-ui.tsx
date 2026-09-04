@@ -57,8 +57,13 @@ export function ItemCard({ icon: Icon, title, description, meta, badges, actions
   </article>
 }
 
-export function Field({ label, className, ...props }: React.ComponentProps<typeof Input> & { label: string }) {
-  return <label className={cn('grid content-start gap-2 text-sm font-medium', className)}><Trans id={label} /><Input {...props} /></label>
+export function Field({ label, icon: Icon, className, ...props }: React.ComponentProps<typeof Input> & { label: string; icon?: LucideIcon }) {
+  return <label className={cn('grid content-start gap-2 text-sm font-medium', className)}>
+    <Trans id={label} />
+    {Icon
+      ? <span className="relative"><Icon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" {...props} /></span>
+      : <Input {...props} />}
+  </label>
 }
 
 export function SelectField({ label, options, className, ...props }: React.ComponentProps<'select'> & { label: string; options: Array<string | [string, string]> }) {

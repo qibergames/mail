@@ -31,6 +31,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 20. Admin és backup UX | `done` | Működő backup-követés és modalos, kártyás adminfelület |
 | 21. Admin render stabilizálás | `done` | Stabil hook-sorrend és fordítási figyelmeztetés nélküli admin route |
 | 22. Push állapotjelzés | `done` | Aktuális eszköz-subscription jól látható állapota |
+| 23. IMAP import űrlap | `done` | Áttekinthető, szekciókra bontott importbeállítások |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -270,6 +271,15 @@ Ellenőrzőkapu: TypeScript, ESLint, Bun-tesztek és production build.
 
 Eredmény: a beállítási sor most egyértelműen mutatja, hogy az értesítés ezen az eszközön aktív-e.
 
+## 23. fázis – IMAP import űrlap `done`
+
+- A kapcsolat, hitelesítés és cél beállításai külön, reszponzív csoportokba kerültek.
+- Az érzékeny mezők és az ideiglenes hitelesítőadat-kezelés egyértelmű vizuális jelzést kapott.
+
+Ellenőrzőkapu: TypeScript, ESLint, Bun-tesztek és production build.
+
+Eredmény: az IMAP import kevesebb vizuális zajjal, követhető sorrendben tölthető ki.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -300,3 +310,4 @@ Eredmény: a beállítási sor most egyértelműen mutatja, hogy az értesítés
 - 2026-09-04: 20. fázis lezárva. A backup állapotkezelése és hibajelzése javítva, az adminfelület kártyás és modalos megjelenést kapott.
 - 2026-09-04: 21. fázis lezárva. Az admin route hook-sorrendje és a dinamikus Lingui-használat javítva.
 - 2026-09-04: 22. fázis lezárva. A push értesítési kapcsoló aktuális eszközállapota láthatóvá vált.
+- 2026-09-04: 23. fázis lezárva. Az IMAP import űrlapja áttekinthető, reszponzív szekciókra lett bontva.
