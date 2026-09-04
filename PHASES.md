@@ -17,6 +17,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 6. Admin és extra funkciók | `done` | Shared mail, routing, API, IMAP, backup, audit |
 | 7. PWA és push | `done` | Standalone PWA, Web Push és deep link |
 | 8. Stabilizálás | `done` | 12 teszt, friss-D1 próba, build és deploy dry-run |
+| 9. Éles helyreállítás | `done` | D1 migráció, runtime Turnstile és production smoke |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -120,7 +121,17 @@ Eredmény: manifest, 192/512/Apple és külön full-bleed maskable QiberMail iko
 
 Végső elfogadás: új Cloudflare accounton telepíthető; domain kapcsolható; levél küldhető és fogadható; minden admin/shared/korábbi Pro funkció működik; mobilon telepíthető; háttér-email telefonos push értesítést küld; csak `bun.lock` létezik; minden CI-ellenőrzés zöld.
 
-Eredmény: CSP, HSTS, Referrer/Permissions policy, input- és méretlimitek, Turnstile/rate limit, API scope, jogosultság-ellenőrzés, raw/attachment idempotencia, private-network endpoint tiltás és push-adatminimalizálás bekerült. `bun install --frozen-lockfile`, TypeScript, ESLint, 12 Bun-teszt, Vite production build, tiszta D1 migráció és Wrangler deploy dry-run zöld. Worker feltöltés: 3309.54 KiB, gzip 710.80 KiB. Az éles Cloudflare-domain, Email Sending, telefonos install és bezárt-app push próba külső credential/eszköz hiányában `pending_external`.
+Eredmény: CSP, HSTS, Referrer/Permissions policy, input- és méretlimitek, Turnstile/rate limit, API scope, jogosultság-ellenőrzés, raw/attachment idempotencia, private-network endpoint tiltás és push-adatminimalizálás bekerült. `bun install --frozen-lockfile`, TypeScript, ESLint, 12 Bun-teszt, Vite production build, tiszta D1 migráció és Wrangler deploy dry-run zöld. Worker feltöltés: 3309.54 KiB, gzip 710.80 KiB. Az Email Sending, telefonos install és bezárt-app push próba továbbra is `pending_external`.
+
+## 9. fázis – Éles helyreállítás `done`
+
+- A production Worker D1 bindingje bekerült a Wrangler konfigurációba, mindhárom migráció lefutott az éles adatbázison.
+- A `bun run deploy` most build után automatikusan alkalmazza a remote D1 migrációkat, majd csak siker esetén deployol.
+- A Turnstile nyilvános site keyt a kliens runtime API-n keresztül kapja, így Wrangler secretként tárolva is működik.
+
+Ellenőrzőkapu: production `/` átirányítás, `/setup` 200, migrációlista, runtime Turnstile key, teljes `bun run check` és sikeres Worker deploy.
+
+Eredmény: az éles root 307-tel a setupra irányít, a setup 200, a D1 naprakész, a Turnstile key elérhető és a Worker `0155bf11-056a-41f5-b349-2aa0b391bbac` verziója fut.
 
 ## Tudatos egyszerűsítések
 
@@ -138,3 +149,4 @@ Eredmény: CSP, HSTS, Referrer/Permissions policy, input- és méretlimitek, Tur
 - 2026-09-04: 2–4. fázis lezárva. Friss D1 migráció, 9 Cloudflare binding, Better Auth rollback smoke, mail routing/queue/realtime elkészült.
 - 2026-09-04: 5–7. fázis lezárva. Reszponzív kliens, beállítások/admin/eszközök, shared funkciók, PWA és Web Push elkészült.
 - 2026-09-04: 8. fázis helyi kapui lezárva. 12/12 teszt, TypeScript, lint, build, friss D1 és Wrangler dry-run sikeres; éles account/telefon validáció `pending_external`.
+- 2026-09-04: 9. fázis lezárva. A hiányzó production D1 migráció és a Turnstile build/runtime eltérés javítva; az éles setup smoke zöld.

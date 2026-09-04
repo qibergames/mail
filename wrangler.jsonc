@@ -37,7 +37,7 @@
     {
       "binding": "DB",
       "database_name": "qibermail",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "8ba9978a-c333-4497-9d19-00b580acab93",
       "migrations_dir": "drizzle/migrations"
     }
   ],

@@ -11,27 +11,38 @@ declare global {
 
 export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
   const container = useRef<HTMLDivElement>(null)
-  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY
 
   useEffect(() => {
-    if (!siteKey) {
-      onToken('development')
-      return
-    }
+    let cancelled = false
+    let script: HTMLScriptElement | undefined
+    let widgetId: string | undefined
 
-    const script = document.createElement('script')
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
-    script.async = true
-    script.onload = () => {
+    const render = (siteKey: string) => {
       if (container.current && window.turnstile) {
-        window.turnstile.render(container.current, { sitekey: siteKey, callback: onToken })
+        widgetId = window.turnstile.render(container.current, { sitekey: siteKey, callback: onToken })
       }
     }
-    document.head.appendChild(script)
+
+    void fetch('/api/setup')
+      .then((response) => response.json<{ turnstileSiteKey?: string }>())
+      .then(({ turnstileSiteKey }) => {
+        if (cancelled) return
+        if (!turnstileSiteKey) return onToken('development')
+        if (window.turnstile) return render(turnstileSiteKey)
+        script = document.createElement('script')
+        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+        script.async = true
+        script.onload = () => render(turnstileSiteKey)
+        document.head.appendChild(script)
+      })
+      .catch((error) => console.error('Turnstile configuration failed', error))
+
     return () => {
-      script.parentNode?.removeChild(script)
+      cancelled = true
+      if (widgetId) window.turnstile?.remove(widgetId)
+      script?.remove()
     }
-  }, [onToken, siteKey])
+  }, [onToken])
 
   return <div ref={container} />
 }

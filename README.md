@@ -68,12 +68,11 @@ bunx wrangler secret put VAPID_PUBLIC_KEY
 bunx wrangler secret put VAPID_PRIVATE_KEY
 ```
 
-`CF_TOKEN` needs Zone Read plus Email Routing DNS/Rules and Email Sending edit permissions for the zones QiberMail manages. Set `VITE_TURNSTILE_SITE_KEY` as a build variable when Turnstile is enabled.
+`CF_TOKEN` needs Zone Read plus Email Routing DNS/Rules and Email Sending edit permissions for the zones QiberMail manages. The public `VITE_TURNSTILE_SITE_KEY` is read from the Worker binding at runtime.
 
-Apply the schema and deploy:
+Build, apply the remote schema, and deploy:
 
 ```bash
-bun run db:migrate:remote
 bun run deploy
 ```
 
