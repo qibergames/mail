@@ -67,9 +67,9 @@ export function AdminApp({ section }: { section: AdminSection }) {
     <section className="space-y-4">
       <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center">
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><details.icon /></span>
-        <div className="min-w-0"><h2 className="text-2xl font-semibold"><Trans id={details.title} /></h2><p className="text-sm text-muted-foreground"><Trans id={details.description} /></p></div>
+        <div className="min-w-0"><h2 className="text-2xl font-semibold">{i18n._(details.title)}</h2><p className="text-sm text-muted-foreground">{i18n._(details.description)}</p></div>
         <span className="w-fit rounded-full bg-muted px-3 py-1 text-sm font-medium sm:ml-auto">{items}</span>
-        {details.action && <Button onClick={() => setCreateOpen(true)}><Plus /><Trans id={details.action} /></Button>}
+        {details.action && <Button onClick={() => setCreateOpen(true)}><Plus />{i18n._(details.action)}</Button>}
       </div>
 
       {items === 0 && <div className="rounded-2xl border border-dashed bg-card/50 p-12 text-center text-sm text-muted-foreground"><Trans id="No records yet." /></div>}
@@ -82,7 +82,7 @@ export function AdminApp({ section }: { section: AdminSection }) {
       {section === 'audit' && <div className="grid gap-2">{data.logs.map((log) => <AdminItem key={log.id} icon={ScrollText} title={log.action} description={new Date(log.createdAt).toLocaleString(i18n.locale)} meta={log.metadata} />)}</div>}
     </section>
 
-    <AdminModal open={createOpen} title={details.action || details.title} onClose={() => setCreateOpen(false)}>
+    <AdminModal open={createOpen} title={i18n._(details.action || details.title)} onClose={() => setCreateOpen(false)}>
       {section === 'accounts' && <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'user:create', name: form.get('name'), email: form.get('email'), password: form.get('password'), role: form.get('role') }, event.currentTarget) }}><Field label="Name" name="name" required /><Field label="Email" name="email" type="email" required /><Field label="Temporary password" name="password" type="password" minLength={12} required /><Select label="Role" name="role" options={[["user", i18n._('User')], ['admin', i18n._('Administrator')]]} /><FormActions busy={busy} close={() => setCreateOpen(false)} label="Create account" /></form>}
       {section === 'domains' && <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'domain:create', hostname: form.get('hostname') }, event.currentTarget) }}><Field label="Domain" name="hostname" placeholder="example.com" required /><FormActions busy={busy} close={() => setCreateOpen(false)} label="Add domain" /></form>}
       {section === 'mailboxes' && <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void post({ action: 'mailbox:create', userId: form.get('userId'), domainId: form.get('domainId'), localPart: form.get('localPart'), displayName: form.get('displayName'), mailboxType: form.get('mailboxType') }, event.currentTarget) }}><Select label="Owner" name="userId" options={data.users.map((user) => [user.id, user.name])} /><Select label="Domain" name="domainId" options={data.domains.map((domain) => [domain.id, domain.hostname])} /><Field label="Address" name="localPart" required /><Field label="Display name" name="displayName" /><Select label="Mailbox type" name="mailboxType" options={[["personal", i18n._('Personal')], ['shared', i18n._('Shared')]]} /><FormActions busy={busy || !data.domains.length} close={() => setCreateOpen(false)} label="Create mailbox" /></form>}
@@ -100,7 +100,7 @@ function AdminModal({ open, title, onClose, children }: { open: boolean; title: 
     if (!open && ref.current?.open) ref.current.close()
   }, [open])
   return <dialog ref={ref} onCancel={onClose} className="m-auto max-h-[calc(100dvh-2rem)] w-[min(36rem,calc(100%-2rem))] overflow-y-auto rounded-2xl border bg-background p-0 text-foreground shadow-2xl backdrop:bg-black/60">
-    <div className="flex items-center border-b px-5 py-4"><h2 className="text-xl font-semibold"><Trans id={title} /></h2><Button className="ml-auto" type="button" size="icon" variant="ghost" onClick={onClose}><X /><span className="sr-only"><Trans id="Close" /></span></Button></div>
+    <div className="flex items-center border-b px-5 py-4"><h2 className="text-xl font-semibold">{title}</h2><Button className="ml-auto" type="button" size="icon" variant="ghost" onClick={onClose}><X /><span className="sr-only"><Trans id="Close" /></span></Button></div>
     <div className="p-5">{children}</div>
   </dialog>
 }
@@ -114,12 +114,12 @@ function AdminItem({ icon: Icon, title, description, meta, badges, actions }: { 
 
 function ItemGrid({ children }: { children: React.ReactNode }) { return <div className="grid gap-3 md:grid-cols-2">{children}</div> }
 function Badge({ children, active, danger }: { children: React.ReactNode; active?: boolean; danger?: boolean }) { return <span className={cn('rounded-full border px-2.5 py-0.5 text-xs font-medium', active && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600', danger && 'border-red-500/30 bg-red-500/10 text-red-600', !active && !danger && 'bg-muted text-muted-foreground')}>{children}</span> }
-function FormActions({ busy, close, label }: { busy: boolean; close: () => void; label: string }) { return <div className="flex justify-end gap-2 sm:col-span-2"><Button type="button" variant="outline" onClick={close}><Trans id="Cancel" /></Button><Button disabled={busy}>{busy ? <LoaderCircle className="animate-spin" /> : <Plus />}<Trans id={label} /></Button></div> }
+function FormActions({ busy, close, label }: { busy: boolean; close: () => void; label: string }) { const { i18n } = useLingui(); return <div className="flex justify-end gap-2 sm:col-span-2"><Button type="button" variant="outline" onClick={close}><Trans id="Cancel" /></Button><Button disabled={busy}>{busy ? <LoaderCircle className="animate-spin" /> : <Plus />}{i18n._(label)}</Button></div> }
 
 function mailboxAddress(data: AdminData, id: string) {
   const mailbox = data.mailboxes.find((item) => item.id === id)
   return mailbox ? `${mailbox.localPart}@${mailbox.hostname}` : id
 }
 
-function Field({ label, ...props }: React.ComponentProps<typeof Input> & { label: string }) { return <label className="grid gap-2 text-sm font-medium"><Trans id={label} /><Input {...props} /></label> }
-function Select({ label, name, options }: { label: string; name: string; options: Array<Array<string>> }) { return <label className="grid gap-2 text-sm font-medium"><Trans id={label} /><select className="h-10 rounded-md border bg-background px-3" name={name}>{options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label> }
+function Field({ label, ...props }: React.ComponentProps<typeof Input> & { label: string }) { const { i18n } = useLingui(); return <label className="grid gap-2 text-sm font-medium">{i18n._(label)}<Input {...props} /></label> }
+function Select({ label, name, options }: { label: string; name: string; options: Array<Array<string>> }) { const { i18n } = useLingui(); return <label className="grid gap-2 text-sm font-medium">{i18n._(label)}<select className="h-10 rounded-md border bg-background px-3" name={name}>{options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label> }

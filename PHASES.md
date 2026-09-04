@@ -29,6 +29,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 18. Olvasottsági jelzés | `done` | Jól elkülönülő olvasott és olvasatlan levélsorok |
 | 19. Email törzs méretezése | `done` | Szélesebb, tartalommagassághoz igazodó levélnézet |
 | 20. Admin és backup UX | `done` | Működő backup-követés és modalos, kártyás adminfelület |
+| 21. Admin render stabilizálás | `done` | Stabil hook-sorrend és fordítási figyelmeztetés nélküli admin route |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -250,6 +251,15 @@ Ellenőrzőkapu: TypeScript, ESLint, Bun-tesztek és production build.
 
 Eredmény: a mentésindítás dokumentált Workflow bindingon fut, hibánál nem hagy beragadt sort, a felület automatikusan követi az állapotát; az admin létrehozás modalos, a tartalom reszponzív kártyákon jelenik meg.
 
+## 21. fázis – Admin render stabilizálás `done`
+
+- Az admin route minden renderben pontosan egyszer hívja a paraméter-hookot.
+- A dinamikus admin- és backup-feliratok a Lingui runtime fordítófüggvényét használják.
+
+Ellenőrzőkapu: TypeScript, ESLint, Bun-tesztek és production build.
+
+Eredmény: megszűnt a React `#300` összeomlás és az érintett lefordítatlan Lingui-figyelmeztetés.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -278,3 +288,4 @@ Eredmény: a mentésindítás dokumentált Workflow bindingon fut, hibánál nem
 - 2026-09-04: 18. fázis lezárva. A levéllista egyértelmű és akadálymentes olvasottsági jelzést kapott.
 - 2026-09-04: 19. fázis lezárva. A HTML-email törzse szélesebb és automatikusan a tartalomhoz igazodik.
 - 2026-09-04: 20. fázis lezárva. A backup állapotkezelése és hibajelzése javítva, az adminfelület kártyás és modalos megjelenést kapott.
+- 2026-09-04: 21. fázis lezárva. Az admin route hook-sorrendje és a dinamikus Lingui-használat javítva.
