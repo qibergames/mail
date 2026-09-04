@@ -15,7 +15,6 @@ type ToolData = {
   deliveries: Array<{ id: string; webhookId: string; eventType: string; status: string; attempts: number; error: string | null }>
 }
 type Mailbox = { id: string; address: string }
-type BackupData = { settings: { enabled: boolean; scheduleType: string; scheduleValue: number | null; retentionEnabled: boolean; retentionDays: number } | null; backups: Array<{ id: string; status: string; filename: string | null; size: number | null; createdAt: string }> }
 
 export function ToolsApp({ section }: { section: 'contacts' | 'templates' | 'calendar' | 'api-keys' | 'webhooks' | 'import-export' }) {
   const { i18n } = useLingui()
@@ -100,21 +99,6 @@ function ImportProgress({ current, total }: { current: number; total: number }) 
       <div className={`h-full rounded-full bg-primary transition-[width] duration-300 ${total ? '' : 'w-1/3 animate-pulse'}`} style={total ? { width: `${percent}%` } : undefined} />
     </div>
   </div>
-}
-
-export function BackupApp() {
-  const [data, setData] = useState<BackupData | null>(null)
-  async function load() {
-    const response = await fetch('/api/backups')
-    if (response.ok) setData(await response.json<BackupData>())
-  }
-  useEffect(() => { void load() }, [])
-  if (!data) return <div className="grid min-h-64 place-items-center"><LoaderCircle className="animate-spin" /></div>
-  return <BackupCard data={data} reload={load} />
-}
-
-function BackupCard({ data, reload }: { data: BackupData; reload: () => Promise<void> }) {
-  return <Card><CardHeader><CardTitle><Trans id="Backup and restore" /></CardTitle><CardDescription><Trans id="D1 backups are encrypted in transit and stored in the configured private R2 bucket." /></CardDescription></CardHeader><CardContent className="grid gap-5"><Rows>{data.backups.map((backup) => <Row key={backup.id}><span>{backup.filename ?? backup.id}<small className="block text-muted-foreground">{backup.status} · {new Date(backup.createdAt).toLocaleString()}</small></span>{backup.status === 'completed' && <Button asChild variant="outline" size="sm"><a href={`/api/backups/${backup.id}`}><Download /><Trans id="Download" /></a></Button>}</Row>)}</Rows><div className="flex flex-wrap gap-2"><Button onClick={async () => { await fetch('/api/backups', { method: 'POST' }); await reload() }}><Plus /><Trans id="Create backup" /></Button><label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"><Upload /><Trans id="Restore backup" /><input className="sr-only" type="file" accept="application/json" onChange={async (event) => { const file = event.target.files?.[0]; if (!file || !confirm('Restore this backup? Current data will be replaced.')) return; const response = await fetch('/api/backups', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: file }); if (response.ok) location.assign('/login') }} /></label></div><form className="grid gap-3 sm:grid-cols-3" onSubmit={async (event) => { event.preventDefault(); const form = new FormData(event.currentTarget); await fetch('/api/backups', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: form.get('enabled') === 'on', scheduleType: form.get('scheduleType'), scheduleValue: form.get('scheduleValue') ? Number(form.get('scheduleValue')) : null, retentionEnabled: form.get('retentionEnabled') === 'on', retentionDays: Number(form.get('retentionDays')) }) }); await reload() }}><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="enabled" defaultChecked={data.settings?.enabled} /><Trans id="Scheduled backups" /></label><label className="grid gap-2 text-sm"><Trans id="Schedule" /><select name="scheduleType" defaultValue={data.settings?.scheduleType ?? 'daily'} className="h-10 rounded-md border bg-background px-3"><option value="daily">daily</option><option value="weekly">weekly</option><option value="monthly">monthly</option></select></label><Field label="Day value" name="scheduleValue" type="number" min={0} max={31} defaultValue={data.settings?.scheduleValue ?? ''} /><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="retentionEnabled" defaultChecked={data.settings?.retentionEnabled} /><Trans id="Delete expired backups" /></label><Field label="Retention days" name="retentionDays" type="number" min={1} max={3650} defaultValue={data.settings?.retentionDays ?? 30} /><Button className="w-fit"><Trans id="Save" /></Button></form></CardContent></Card>
 }
 
 function Rows({ children }: { children: React.ReactNode }) { return <div className="grid gap-2">{children}</div> }

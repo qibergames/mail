@@ -28,6 +28,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 17. Levélolvasó javítások | `done` | Görgethető panelek, sticky műveletsáv és betöltődő képek |
 | 18. Olvasottsági jelzés | `done` | Jól elkülönülő olvasott és olvasatlan levélsorok |
 | 19. Email törzs méretezése | `done` | Szélesebb, tartalommagassághoz igazodó levélnézet |
+| 20. Admin és backup UX | `done` | Működő backup-követés és modalos, kártyás adminfelület |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -239,6 +240,16 @@ Ellenőrzőkapu: TypeScript, ESLint, 16 Bun-teszt és production build.
 
 Eredmény: a levél nem egy kis belső görgetődobozban, hanem természetes méretben jelenik meg.
 
+## 20. fázis – Admin és backup UX `done`
+
+- A backup indítási hibák nem maradhatnak néma vagy örökké várakozó állapotban.
+- A futó mentéseket a felület automatikusan követi, a hibákat és eredményeket jól láthatóan jelzi.
+- Az admin listák modern, reszponzív kártyanézetet, a létrehozó műveletek modalokat kapnak.
+
+Ellenőrzőkapu: TypeScript, ESLint, Bun-tesztek és production build.
+
+Eredmény: a mentésindítás dokumentált Workflow bindingon fut, hibánál nem hagy beragadt sort, a felület automatikusan követi az állapotát; az admin létrehozás modalos, a tartalom reszponzív kártyákon jelenik meg.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -266,3 +277,4 @@ Eredmény: a levél nem egy kis belső görgetődobozban, hanem természetes mé
 - 2026-09-04: 17. fázis lezárva. A levélpanelek scrollja, a sticky műveletsáv és az emailképek megjelenítése javítva.
 - 2026-09-04: 18. fázis lezárva. A levéllista egyértelmű és akadálymentes olvasottsági jelzést kapott.
 - 2026-09-04: 19. fázis lezárva. A HTML-email törzse szélesebb és automatikusan a tartalomhoz igazodik.
+- 2026-09-04: 20. fázis lezárva. A backup állapotkezelése és hibajelzése javítva, az adminfelület kártyás és modalos megjelenést kapott.

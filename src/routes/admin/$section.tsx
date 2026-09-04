@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { AdminApp } from '@/components/admin-app'
-import { BackupApp } from '@/components/tools-app'
+import { BackupApp } from '@/components/backup-app'
 
 const sections = ['accounts', 'audit', 'backups', 'domains', 'mailboxes', 'aliases', 'access', 'routing'] as const
 type AdminSection = typeof sections[number]
