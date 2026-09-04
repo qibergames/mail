@@ -3,6 +3,7 @@ import PostalMime from 'postal-mime'
 import { getDb } from '@/db'
 import { domains, mailboxes, messages } from '@/db/schema'
 import { newId } from '@/lib/ids'
+import { removeMessages } from './sync'
 import { storeAttachments } from './attachments'
 import { accessibleMailboxIds } from './outbound'
 
@@ -27,7 +28,7 @@ export async function importRawEmails(env: CloudflareEnv, userId: string, mailbo
       await storeAttachments(env, id, email.attachments.map((attachment, index) => ({ filename: attachment.filename ?? `attachment-${index + 1}`, type: attachment.mimeType || 'application/octet-stream', content: typeof attachment.content === 'string' ? new TextEncoder().encode(attachment.content).buffer : attachment.content instanceof ArrayBuffer ? attachment.content : attachment.content.buffer.slice(attachment.content.byteOffset, attachment.content.byteOffset + attachment.content.byteLength) as ArrayBuffer, disposition: attachment.disposition === 'inline' ? 'inline' as const : 'attachment' as const, contentId: attachment.contentId })))
       result.ids.push(id)
     } catch (error) {
-      if (rawR2Key) await Promise.all([db.delete(messages).where(eq(messages.rawR2Key, rawR2Key)), env.BUCKET.delete(rawR2Key)])
+      if (rawR2Key) await Promise.all([removeMessages(db, eq(messages.rawR2Key, rawR2Key)), env.BUCKET.delete(rawR2Key)])
       result.skipped++
       result.errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Import failed'}`)
     }

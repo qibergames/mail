@@ -6,6 +6,7 @@ import { storeAttachments } from './attachments'
 import { formatAddress, parseAddress } from './address'
 import { newId } from '@/lib/ids'
 import { enqueueWebhookEvent } from '@/lib/webhooks'
+import { removeMessages } from './sync'
 
 export type OutboundQueueMessage = {
   type: 'outbound-mail'
@@ -93,14 +94,12 @@ export async function queueOutboundEmail(
   try {
     await storeAttachments(env, messageId, input.attachments ?? [])
     if (!input.scheduledAt || input.scheduledAt <= new Date()) await env.OUTBOUND_QUEUE.send(payload)
-    if (input.draftId) await db.delete(messages).where(and(eq(messages.id, input.draftId), eq(messages.userId, userId), eq(messages.status, 'draft')))
+    if (input.draftId) await removeMessages(db, and(eq(messages.id, input.draftId), eq(messages.userId, userId), eq(messages.status, 'draft'))!)
     const recipient = parseAddress(input.to)?.address
     if (recipient) await db.insert(contacts).values({ id: newId('con'), userId, email: recipient, source: 'outbound', lastSeenAt: new Date() }).onConflictDoUpdate({ target: [contacts.userId, contacts.email], set: { lastSeenAt: new Date() } })
   } catch (error) {
-    await db.batch([
-      db.delete(outboundJobs).where(eq(outboundJobs.id, jobId)),
-      db.delete(messages).where(eq(messages.id, messageId)),
-    ])
+    await db.delete(outboundJobs).where(eq(outboundJobs.id, jobId))
+    await removeMessages(db, eq(messages.id, messageId))
     throw error
   }
   return { messageId }

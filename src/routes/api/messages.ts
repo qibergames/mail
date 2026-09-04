@@ -4,6 +4,7 @@ import { getDb } from '@/db'
 import { messages } from '@/db/schema'
 import { requireSession } from '@/lib/api-auth'
 import { accessibleMailboxIds } from '@/lib/email/outbound'
+import { messageSummaryColumns } from '@/lib/email/sync'
 
 export const Route = createFileRoute('/api/messages')({
   server: {
@@ -37,7 +38,7 @@ export const Route = createFileRoute('/api/messages')({
           ...viewFilters,
           ...(query ? [or(like(messages.subject, `%${query}%`), like(messages.fromAddr, `%${query}%`), like(messages.toAddr, `%${query}%`), like(messages.textBody, `%${query}%`))!] : []),
         ]
-        return Response.json(await getDb().select().from(messages).where(and(...filters)).orderBy(desc(messages.createdAt)).limit(100))
+        return Response.json(await getDb().select(messageSummaryColumns).from(messages).where(and(...filters)).orderBy(desc(messages.createdAt)).limit(100))
       },
     },
   },

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
@@ -226,13 +227,33 @@ export const messages = sqliteTable(
 		createdAt: integer("created_at", { mode: "timestamp" })
 			.notNull()
 			.$defaultFn(() => new Date()),
+		// Bumped on every change so clients can pull deltas; see /api/messages/sync.
+		updatedAt: integer("updated_at", { mode: "timestamp" })
+			.notNull()
+			.default(sql`(unixepoch())`)
+			.$onUpdateFn(() => new Date()),
 	},
 	(t) => [
 		index("messages_user_created_idx").on(t.userId, t.createdAt),
 		index("messages_mailbox_idx").on(t.mailboxId),
+		index("messages_mailbox_updated_idx").on(t.mailboxId, t.updatedAt),
 		index("messages_folder_idx").on(t.folderId),
 		uniqueIndex("messages_raw_r2_key_idx").on(t.rawR2Key),
 	],
+);
+
+// Records hard-deleted messages so offline clients can drop them during delta sync.
+export const messageTombstones = sqliteTable(
+	"message_tombstones",
+	{
+		id: text("id").primaryKey(),
+		userId: text("user_id").notNull(),
+		mailboxId: text("mailbox_id"),
+		deletedAt: integer("deleted_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [index("message_tombstones_user_deleted_idx").on(t.userId, t.deletedAt)],
 );
 
 export const messageAttachments = sqliteTable(
@@ -545,6 +566,7 @@ export const schema = {
 	apiKeys,
 	messages,
 	messageAttachments,
+	messageTombstones,
 	outboundJobs,
 	emailTemplates,
 	calendarEvents,

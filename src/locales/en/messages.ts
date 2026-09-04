@@ -393,4 +393,7 @@ export const messages = {
   'Save event': 'Save event',
   'Edit webhook': 'Edit webhook',
   'Save webhook': 'Save webhook',
+  'This message is not available offline yet.': 'This message is not available offline yet.',
+  Offline: 'Offline',
+  'Offline: showing cached mail': 'Offline: showing cached mail',
 }

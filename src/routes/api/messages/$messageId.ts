@@ -7,6 +7,7 @@ import { messageAttachments, messages } from '@/db/schema'
 import { requireSession } from '@/lib/api-auth'
 import { accessibleMailboxIds } from '@/lib/email/outbound'
 import { extractSecurityDetails } from '@/lib/email/security'
+import { notifyRealtime } from '@/lib/email/sync'
 
 export const Route = createFileRoute('/api/messages/$messageId')({
   server: {
@@ -47,6 +48,7 @@ export const Route = createFileRoute('/api/messages/$messageId')({
           ...(body.status && statuses.includes(body.status) ? { status: body.status } : {}),
           ...(body.snoozedUntil !== undefined ? { snoozedUntil: body.snoozedUntil ? new Date(body.snoozedUntil) : null } : {}),
         }).where(eq(messages.id, message.id))
+        await notifyRealtime(env, [session.user.id], { type: 'message:update', messageId: message.id, mailboxId: message.mailboxId })
         return new Response(null, { status: 204 })
       },
     },

@@ -6,6 +6,7 @@ import { newId } from '@/lib/ids'
 import { formatAddress, parseAddress } from './address'
 import { storeAttachments } from './attachments'
 import { resolveDestination, resolveInbound } from './routing'
+import { removeMessages } from './sync'
 import { sendNewMailPush } from '@/lib/push'
 import { enqueueWebhookEvent } from '@/lib/webhooks'
 
@@ -136,7 +137,7 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
   try {
     await storeAttachments(env, messageId, attachments)
   } catch (error) {
-    await db.delete(messages).where(eq(messages.id, messageId))
+    await removeMessages(db, eq(messages.id, messageId))
     throw error
   }
 

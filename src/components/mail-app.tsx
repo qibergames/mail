@@ -11,6 +11,7 @@ import {
   Inbox,
   LoaderCircle,
   LockKeyhole,
+  CloudOff,
   LogOut,
   Mail,
   MailOpen,
@@ -25,7 +26,7 @@ import {
   TriangleAlert,
   Wrench,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Composer } from './composer'
 import type { Draft } from './composer'
@@ -37,27 +38,18 @@ import { authClient } from '@/lib/auth-client'
 import { resolveInlineImages } from '@/lib/email/html'
 import type { SecurityDetails } from '@/lib/email/security'
 import { clampMessageListWidth } from '@/lib/mail-layout'
+import { mailStore } from '@/lib/mail-store'
+import type { MessageSummary } from '@/lib/mail-store'
 import { cn } from '@/lib/utils'
 
 export type MailView = 'inbox' | 'sent' | 'drafts' | 'starred' | 'snoozed' | 'archived' | 'spam' | 'trash'
 
 type Mailbox = { id: string; name: string | null; address: string; type: string }
 type Folder = { id: string; mailboxId: string; name: string; color: string }
-type Message = {
-  id: string
-  fromAddr: string
-  toAddr: string
-  subject: string | null
-  snippet: string | null
-  textBody: string | null
-  htmlBody: string | null
-  status: string
-  read: boolean
-  starred: boolean
-  createdAt: string
-}
+type Message = MessageSummary
 type Attachment = { id: string; filename: string; contentType: string; size: number; contentId: string | null }
-type MessageDetail = { message: Message; attachments: Array<Attachment>; security: SecurityDetails | null }
+type MessageDetail = { message: Message & { textBody: string | null; htmlBody: string | null }; attachments: Array<Attachment>; security: SecurityDetails | null }
+type Body = { textBody: string | null; htmlBody: string | null }
 
 function senderParts(value: string) {
   const address = value.match(/<([^>]+)>/)?.[1]
@@ -116,15 +108,17 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   const [mailboxes, setMailboxes] = useState<Array<Mailbox>>([])
   const [mailboxId, setMailboxId] = useState('')
   const [folders, setFolders] = useState<Array<Folder>>([])
-  const [messages, setMessages] = useState<Array<Message>>([])
-  const [selected, setSelected] = useState<Message | null>(null)
+  const storeVersion = useSyncExternalStore(mailStore.subscribe, mailStore.getVersion, () => 0)
+  const [searchResults, setSearchResults] = useState<Array<Message> | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(() => readSearch('message'))
+  const [selectedBody, setSelectedBody] = useState<(Body & { id: string }) | null>(null)
   const [selectedAttachments, setSelectedAttachments] = useState<Array<Attachment>>([])
   const [selectedSecurity, setSelectedSecurity] = useState<SecurityDetails | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Array<string>>([])
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [searching, setSearching] = useState(false)
   const [composer, setComposer] = useState<Draft | null>(null)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [refresh, setRefresh] = useState(0)
@@ -134,11 +128,14 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   const listScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    void fetch('/api/mailboxes').then((response) => response.json<Array<Mailbox>>()).then((rows) => {
+    const apply = (rows: Array<Mailbox>) => {
       setMailboxes(rows)
       const preferred = readSearch('mailbox') ?? storedMailbox()
       setMailboxId((current) => current || (preferred && rows.some((row) => row.id === preferred) ? preferred : rows[0]?.id || ''))
-    })
+    }
+    void mailStore.readMeta<Array<Mailbox>>('mailboxes').then((cached) => { if (cached?.length) apply(cached) })
+    void fetch('/api/mailboxes').then((response) => response.json<Array<Mailbox>>()).then((rows) => { apply(rows); void mailStore.writeMeta('mailboxes', rows) }).catch(() => undefined)
+    void mailStore.start()
   }, [])
 
   useEffect(() => {
@@ -147,16 +144,13 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
     writeSearch({ mailbox: mailboxId })
   }, [mailboxId])
 
-  const openedMessage = useRef(false)
   useEffect(() => {
-    // Skip the initial null so the restore effect below can still read ?message= from the URL.
-    if (!selected && !openedMessage.current) return
-    openedMessage.current = true
-    writeSearch({ message: selected?.id ?? null })
-  }, [selected])
+    writeSearch({ message: selectedId })
+  }, [selectedId])
 
   useEffect(() => {
-    void fetch('/api/folders').then((response) => response.json<Array<Folder>>()).then(setFolders)
+    void mailStore.readMeta<Array<Folder>>('folders').then((cached) => { if (cached) setFolders(cached) })
+    void fetch('/api/folders').then((response) => response.json<Array<Folder>>()).then((rows) => { setFolders(rows); void mailStore.writeMeta('folders', rows) }).catch(() => undefined)
   }, [])
 
   useEffect(() => {
@@ -164,38 +158,81 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
     if (folder) setMailboxId(folder.mailboxId)
   }, [folderId, folders])
 
+  // Search goes to the server (full-text over bodies); everything else is served from the local cache.
   useEffect(() => {
-    const messageId = readSearch('message')
-    if (!messageId) return
-    void fetch(`/api/messages/${encodeURIComponent(messageId)}`).then(async (response) => {
-      if (!response.ok) return
-      const detail = await response.json<MessageDetail>()
-      setSelected(detail.message)
-      setSelectedAttachments(detail.attachments)
-      setSelectedSecurity(detail.security)
-      setDetailsOpen(false)
-      if (!detail.message.read) await updateMessage(detail.message.id, { read: true })
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!mailboxId) return
-    setLoading(true)
-    const params = new URLSearchParams({ view, mailboxId })
+    if (!mailboxId || !search) { setSearchResults(null); setSearching(false); return }
+    setSearching(true)
+    const params = new URLSearchParams({ view, mailboxId, q: search })
     if (folderId) params.set('folderId', folderId)
-    if (search) params.set('q', search)
-    void fetch(`/api/messages?${params}`).then((response) => response.json<Array<Message>>()).then((rows) => {
-      setMessages(rows)
-      setSelected((current) => rows.find((message) => message.id === current?.id) ?? null)
-      setSelectedIds([])
-      setLoading(false)
-    })
-  }, [folderId, mailboxId, refresh, search, view])
+    void fetch(`/api/messages?${params}`).then((response) => response.json<Array<Message>>()).then((rows) => { setSearchResults(rows); setSearching(false) }).catch(() => setSearching(false))
+  }, [folderId, mailboxId, search, view])
+
+  useEffect(() => { if (refresh) void mailStore.sync() }, [refresh])
+
+  const localMessages = useMemo(() => mailboxId ? mailStore.select(view, mailboxId, folderId) : [], [storeVersion, view, mailboxId, folderId])
+  const messages = search && searchResults ? searchResults : localMessages
+  const loading = search ? searching : !mailStore.ready
+  const selectedSummary = selectedId ? (messages.find((message) => message.id === selectedId) ?? mailStore.get(selectedId)) : null
+  const selected = selectedSummary ? { ...selectedSummary, textBody: selectedBody?.id === selectedSummary.id ? selectedBody.textBody : null, htmlBody: selectedBody?.id === selectedSummary.id ? selectedBody.htmlBody : null } : null
+  const bodyLoading = Boolean(selectedSummary) && selectedBody?.id !== selectedSummary?.id
+
+  useEffect(() => { setSelectedIds([]) }, [view, mailboxId, folderId])
+
+  // Load the open message body: from the cache first, then from the server (drafts are never cached).
+  useEffect(() => {
+    if (!selectedId) { setSelectedBody(null); setSelectedAttachments([]); setSelectedSecurity(null); return }
+    const guard = { cancelled: false }
+    const isCancelled = () => guard.cancelled
+    const id = selectedId
+    setDetailsOpen(false)
+    void (async () => {
+      const cached = await mailStore.getBody<Attachment, SecurityDetails>(id)
+      if (isCancelled()) return
+      if (cached && mailStore.get(id)?.status !== 'draft') {
+        setSelectedBody({ id, textBody: cached.textBody, htmlBody: cached.htmlBody })
+        setSelectedAttachments(cached.attachments)
+        setSelectedSecurity(cached.security)
+      }
+      try {
+        const response = await fetch(`/api/messages/${encodeURIComponent(id)}`)
+        if (!response.ok || isCancelled()) return
+        const detail = await response.json<MessageDetail>()
+        if (isCancelled()) return
+        setSelectedBody({ id, textBody: detail.message.textBody, htmlBody: detail.message.htmlBody })
+        setSelectedAttachments(detail.attachments)
+        setSelectedSecurity(detail.security)
+        if (detail.message.status !== 'draft') void mailStore.putBody({ id, textBody: detail.message.textBody, htmlBody: detail.message.htmlBody, attachments: detail.attachments, security: detail.security, cachedAt: Date.now() })
+      } catch { /* offline: keep whatever the cache had */ }
+    })()
+    const summary = mailStore.get(id)
+    if (summary && !summary.read) void mailStore.update([id], { read: true })
+    return () => { guard.cancelled = true }
+  }, [selectedId])
+
+  // Warm the body cache for the newest messages in view so they open instantly and read offline.
+  useEffect(() => {
+    if (!mailStore.ready || mailStore.offline || search) return
+    const guard = { cancelled: false }
+    const candidates = localMessages.slice(0, 20).filter((message) => message.status !== 'draft')
+    const timer = setTimeout(async () => {
+      for (const message of candidates) {
+        if (guard.cancelled) return
+        if (await mailStore.hasBody(message.id)) continue
+        try {
+          const response = await fetch(`/api/messages/${encodeURIComponent(message.id)}`)
+          if (!response.ok) continue
+          const detail = await response.json<MessageDetail>()
+          await mailStore.putBody({ id: message.id, textBody: detail.message.textBody, htmlBody: detail.message.htmlBody, attachments: detail.attachments, security: detail.security, cachedAt: Date.now() })
+        } catch { return }
+      }
+    }, 1500)
+    return () => { guard.cancelled = true; clearTimeout(timer) }
+  }, [localMessages, search])
 
   useEffect(() => {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const socket = new WebSocket(`${protocol}//${location.host}/api/realtime`)
-    socket.onmessage = () => setRefresh((value) => value + 1)
+    socket.onmessage = () => void mailStore.sync()
     if ('clearAppBadge' in navigator) void navigator.clearAppBadge()
     return () => socket.close()
   }, [])
@@ -214,32 +251,22 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
     return () => window.removeEventListener('resize', fit)
   }, [])
 
-  async function selectMessage(message: Message) {
-    const response = await fetch(`/api/messages/${message.id}`)
-    if (!response.ok) return
-    const detail = await response.json<MessageDetail>()
-    setSelected(detail.message)
-    setSelectedAttachments(detail.attachments)
-    setSelectedSecurity(detail.security)
-    setDetailsOpen(false)
-    if (!detail.message.read) {
-      await updateMessage(detail.message.id, { read: true })
-    }
+  function selectMessage(message: Message) {
+    setSelectedId(message.id)
   }
 
-  async function updateMessage(id: string, changes: { read?: boolean; starred?: boolean; status?: string }) {
-    await fetch(`/api/messages/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(changes),
-    })
-    setRefresh((value) => value + 1)
+  function setSelected(message: Message | null) {
+    setSelectedId(message?.id ?? null)
+  }
+
+  async function updateMessage(id: string, changes: { read?: boolean; starred?: boolean; status?: string; snoozedUntil?: string | null }) {
+    await mailStore.update([id], changes)
   }
 
   async function bulk(changes: { read?: boolean; starred?: boolean; status?: 'received' | 'archived' | 'spam' | 'trash' }) {
-    await fetch('/api/messages/bulk', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: selectedIds, ...changes }) })
+    const ids = selectedIds
     setSelectedIds([])
-    setRefresh((value) => value + 1)
+    await mailStore.update(ids, changes)
   }
 
   function recipient(address: string) {
@@ -271,8 +298,8 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   })
 
   return (
-    <main className="h-dvh overflow-hidden bg-muted p-0 md:p-4">
-      <section className="mx-auto grid h-full max-w-[1600px] grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden bg-background md:grid-cols-[16rem_minmax(0,1fr)] md:rounded-3xl md:border md:shadow-xl">
+    <main className="h-dvh overflow-hidden bg-muted p-0 md:p-2">
+      <section className="mx-auto grid h-full max-w-[1800px] grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden bg-background md:grid-cols-[16rem_minmax(0,1fr)] md:rounded-xl md:border md:shadow-xl">
         <aside className={cn('absolute inset-y-0 left-0 z-30 flex min-h-0 w-64 -translate-x-full flex-col gap-5 overflow-y-auto bg-sidebar p-4 transition-transform md:static md:translate-x-0', mobileMenu && 'translate-x-0')}>
           <div className="flex items-center gap-3 px-2 text-xl font-semibold"><span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground"><Mail /></span>QiberMail</div>
           <Button className="h-12 justify-start rounded-2xl px-5" onClick={() => setComposer({})}><Mail /><Trans id="Compose" /></Button>
@@ -303,6 +330,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
         <div className="flex min-h-0 min-w-0 flex-col">
           <header className="flex h-16 shrink-0 items-center gap-2 border-b px-3 md:px-5">
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileMenu((open) => !open)} aria-label={i18n._('Menu')} title={i18n._('Menu')}><Menu /></Button>
+            {mailStore.offline && <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-400" title={i18n._('Offline: showing cached mail')}><CloudOff className="size-3.5" /><span className="hidden sm:inline"><Trans id="Offline" /></span></span>}
             <form className="flex min-w-0 flex-1" onSubmit={(event) => { event.preventDefault(); setSearch(query) }}>
               <div className="flex h-11 min-w-0 flex-1 items-center gap-3 rounded-full bg-muted px-4"><Search className="size-5 text-muted-foreground" /><Input className="h-auto border-0 p-0 shadow-none focus-visible:ring-0" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={i18n._('Search mail')} /></div>
             </form>
@@ -369,14 +397,14 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                     <Button variant="ghost" size="icon" onClick={() => setSelected(null)} aria-label={i18n._('Back to message list')} title={i18n._('Back to message list')}><ArrowLeft /></Button>
                     <Button variant="ghost" size="icon" aria-label={i18n._('Star')} title={i18n._('Star')} onClick={() => updateMessage(selected.id, { starred: !selected.starred })}><Star className={selected.starred ? 'fill-yellow-400 text-yellow-500' : ''} /></Button>
                     <Button variant="ghost" size="icon" aria-label={i18n._('Archive')} title={i18n._('Archive')} onClick={() => updateMessage(selected.id, { status: 'archived' })}><Archive /></Button>
-                    <Button variant="ghost" size="icon" aria-label={i18n._('Snooze one day')} title={i18n._('Snooze one day')} onClick={() => fetch(`/api/messages/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snoozedUntil: new Date(Date.now() + 86_400_000).toISOString() }) }).then(() => setRefresh((value) => value + 1))}><CalendarClock /></Button>
+                    <Button variant="ghost" size="icon" aria-label={i18n._('Snooze one day')} title={i18n._('Snooze one day')} onClick={() => updateMessage(selected.id, { snoozedUntil: new Date(Date.now() + 86_400_000).toISOString() })}><CalendarClock /></Button>
                     <Button variant="ghost" size="icon" aria-label={i18n._('Delete')} title={i18n._('Delete')} onClick={() => updateMessage(selected.id, { status: 'trash' })}><Trash2 /></Button>
                     {selected.status === 'draft' ? <Button className="ml-auto" onClick={() => setComposer({ id: selected.id, to: selected.toAddr, subject: selected.subject ?? '', text: selected.textBody ?? '' })}><Trans id="Edit draft" /></Button> : <><Button className="ml-auto" variant="outline" aria-label={i18n._('Reply')} title={i18n._('Reply')} onClick={() => setComposer({ to: recipient(selected.fromAddr), subject: selected.subject?.startsWith('Re:') ? selected.subject : `Re: ${selected.subject ?? ''}`, text: `\n\n---\n${selected.textBody ?? ''}` })}><CornerUpLeft /><span className="hidden sm:inline"><Trans id="Reply" /></span></Button><Button variant="outline" aria-label={i18n._('Forward')} title={i18n._('Forward')} onClick={() => setComposer({ subject: selected.subject?.startsWith('Fwd:') ? selected.subject : `Fwd: ${selected.subject ?? ''}`, text: `\n\n---\n${selected.textBody ?? ''}` })}><Forward /><span className="hidden sm:inline"><Trans id="Forward" /></span></Button></>}
                   </div>
-                <article className="mx-auto w-full min-w-0 max-w-6xl p-4 md:p-8">
+                <article className="mx-auto w-full min-w-0 max-w-6xl p-4 md:p-6 lg:px-8">
                   <h2 className="text-xl font-semibold break-words sm:text-2xl">{selected.subject || i18n._('(No subject)')}</h2>
                   <MessageHeader message={selected} security={selectedSecurity} open={detailsOpen} onToggle={() => setDetailsOpen((value) => !value)} ownAddresses={mailboxes.map((mailbox) => mailbox.address)} />
-                  {selected.htmlBody ? <iframe title={i18n._('Message content')} sandbox="allow-same-origin" referrerPolicy="no-referrer" className="mt-8 min-h-96 w-full border-0 bg-white" onLoad={(event) => { event.currentTarget.style.height = `${event.currentTarget.contentDocument?.documentElement.scrollHeight ?? 384}px` }} srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;max-width:100%;overflow-x:hidden;word-break:break-word}img,table{max-width:100%!important;height:auto}</style>${resolveInlineImages(selected.htmlBody, selected.id, selectedAttachments)}`} /> : <pre className="mt-8 whitespace-pre-wrap break-words font-sans text-sm leading-7">{selected.textBody || i18n._('This message has no plain-text body.')}</pre>}
+                  {bodyLoading && !selected.htmlBody && !selected.textBody ? <div className="mt-8 grid place-items-center p-12 text-muted-foreground">{mailStore.offline ? <span className="flex items-center gap-2 text-sm"><CloudOff className="size-4" /><Trans id="This message is not available offline yet." /></span> : <LoaderCircle className="animate-spin" />}</div> : selected.htmlBody ? <iframe title={i18n._('Message content')} sandbox="allow-same-origin" referrerPolicy="no-referrer" className="mt-6 min-h-96 w-[calc(100%+2rem)] max-w-none -mx-4 border-0 bg-white sm:mx-0 sm:w-full md:mt-8" onLoad={(event) => { event.currentTarget.style.height = `${event.currentTarget.contentDocument?.documentElement.scrollHeight ?? 384}px` }} srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;max-width:100%;overflow-x:hidden;word-break:break-word}img,table{max-width:100%!important;height:auto}</style>${resolveInlineImages(selected.htmlBody, selected.id, selectedAttachments)}`} /> : <pre className="mt-8 whitespace-pre-wrap break-words font-sans text-sm leading-7">{selected.textBody || i18n._('This message has no plain-text body.')}</pre>}
                   {selectedAttachments.length > 0 && <div className="mt-8 flex flex-wrap gap-2">{selectedAttachments.map((attachment) => <a key={attachment.id} className="rounded-md border px-3 py-2 text-sm hover:bg-muted" href={`/api/messages/${selected.id}/attachments/${attachment.id}`}>{attachment.filename} · {(attachment.size / 1024).toFixed(0)} KB</a>)}</div>}
                 </article>
                 </>
@@ -386,7 +414,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
         </div>
       </section>
       {mobileMenu && <button type="button" aria-label={i18n._('Close menu')} className="absolute inset-0 z-20 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)} />}
-      {composer && <Composer mailboxes={mailboxes} mailboxId={mailboxId} draft={composer} close={() => setComposer(null)} sent={() => { setComposer(null); setRefresh((value) => value + 1) }} />}
+      {composer && <Composer mailboxes={mailboxes} mailboxId={mailboxId} draft={composer} close={() => { setComposer(null); void mailStore.sync() }} sent={() => { setComposer(null); setRefresh((value) => value + 1) }} />}
     </main>
   )
 }

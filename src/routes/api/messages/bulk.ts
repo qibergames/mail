@@ -5,6 +5,8 @@ import { getDb } from '@/db'
 import { messages } from '@/db/schema'
 import { requireSession } from '@/lib/api-auth'
 import { accessibleMailboxIds } from '@/lib/email/outbound'
+import { notifyRealtime } from '@/lib/email/sync'
+import { env } from 'cloudflare:workers'
 
 const schema = z.object({ ids: z.array(z.string()).min(1).max(100), read: z.boolean().optional(), starred: z.boolean().optional(), status: z.enum(['received', 'archived', 'spam', 'trash']).optional() })
 
@@ -19,5 +21,6 @@ export const Route = createFileRoute('/api/messages/bulk')({ server: { handlers:
     ...(input.data.starred === undefined ? {} : { starred: input.data.starred }),
     ...(input.data.status === undefined ? {} : { status: input.data.status }),
   }).where(and(inArray(messages.id, input.data.ids), inArray(messages.mailboxId, mailboxIds)))
+  await notifyRealtime(env, [session.user.id], { type: 'message:update' })
   return new Response(null, { status: 204 })
 } } } })

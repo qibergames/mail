@@ -393,4 +393,7 @@ export const messages = {
   'Save event': 'Esemény mentése',
   'Edit webhook': 'Webhook szerkesztése',
   'Save webhook': 'Webhook mentése',
+  'This message is not available offline yet.': 'Ez a levél offline még nem érhető el.',
+  Offline: 'Offline',
+  'Offline: showing cached mail': 'Offline: a gyorsítótárazott levelek látszanak',
 }

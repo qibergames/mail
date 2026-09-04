@@ -6,6 +6,7 @@ import { domains, mailboxes, messages } from '@/db/schema'
 import { requireSession } from '@/lib/api-auth'
 import { accessibleMailboxIds } from '@/lib/email/outbound'
 import { newId } from '@/lib/ids'
+import { removeMessages } from '@/lib/email/sync'
 
 const schema = z.object({ id: z.string().optional(), mailboxId: z.string(), to: z.string().max(320).default(''), subject: z.string().max(998).default(''), text: z.string().max(2_000_000).default('') })
 
@@ -29,7 +30,7 @@ export const Route = createFileRoute('/api/drafts')({ server: { handlers: {
   DELETE: async ({ request }) => {
     const session = await requireSession(request)
     const id = new URL(request.url).searchParams.get('id')
-    if (id) await getDb().delete(messages).where(and(eq(messages.id, id), eq(messages.userId, session.user.id), eq(messages.status, 'draft')))
+    if (id) await removeMessages(getDb(), and(eq(messages.id, id), eq(messages.userId, session.user.id), eq(messages.status, 'draft'))!)
     return new Response(null, { status: 204 })
   },
 } } })
