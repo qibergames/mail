@@ -22,6 +22,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 11. Turnstile lifecycle | `done` | Lejárat-, timeout- és újrapróbálkozás-kezelés |
 | 12. UI finomhangolás | `done` | Shadcn postaláda-select és könnyebb kapcsolók |
 | 13. MBOX import | `done` | Közvetlen, kötegelt MBOX import deduplikálással |
+| 14. Szekcionált kezelőfelületek | `done` | Külön URL-es oldalak és reszponzív oldalsó navigáció |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -175,6 +176,16 @@ Ellenőrzőkapu: TypeScript, ESLint, 14 Bun-teszt és production build.
 
 Eredmény: közvetlen MBOX import, kötegelt feltöltés, deduplikálás és hibás tételek összesítése elkészült.
 
+## 14. fázis – Szekcionált kezelőfelületek `done`
+
+- A Beállítások, Eszközök és Admin felületek tartalma külön, közvetlenül linkelhető aloldalakra került.
+- Asztali nézetben csoportosított sticky oldalsáv, mobilon vízszintesen görgethető tabnavigáció jelenik meg.
+- Az admin-only mentések navigációja és route-ja továbbra is szerepkörhöz kötött.
+
+Ellenőrzőkapu: route-generálás, TypeScript, ESLint, 14 Bun-teszt és production build.
+
+Eredmény: a korábbi hosszú gyűjtőoldalak helyett Mailflare-szerű, reszponzív szekciónavigáció és külön URL-ek készültek.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -196,3 +207,4 @@ Eredmény: közvetlen MBOX import, kötegelt feltöltés, deduplikálás és hib
 - 2026-09-04: 11. fázis lezárva. A Turnstile lejárat/timeout callbackjei és token-reset bekerültek.
 - 2026-09-04: 12. fázis lezárva. A postaláda-választó és a fejléc kapcsolói shadcn stílusra lettek finomítva.
 - 2026-09-04: 13. fázis lezárva. A Mailflare-kompatibilis, kötegelt MBOX import elkészült.
+- 2026-09-04: 14. fázis lezárva. A Beállítások, Eszközök és Admin felületek külön aloldalakra kerültek.

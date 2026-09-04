@@ -1,0 +1,12 @@
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { AdminApp } from '@/components/admin-app'
+import { BackupApp } from '@/components/tools-app'
+
+const sections = ['accounts', 'audit', 'backups', 'domains', 'mailboxes', 'aliases', 'access', 'routing'] as const
+type AdminSection = typeof sections[number]
+type AdminDataSection = Exclude<AdminSection, 'backups'>
+
+export const Route = createFileRoute('/admin/$section')({
+  beforeLoad: ({ params }) => { if (!sections.includes(params.section as AdminSection)) throw redirect({ to: '/admin/$section', params: { section: 'accounts' } }) },
+  component: () => Route.useParams().section === 'backups' ? <BackupApp /> : <AdminApp section={Route.useParams().section as AdminDataSection} />,
+})

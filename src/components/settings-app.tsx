@@ -1,9 +1,6 @@
 import { Trans, useLingui } from '@lingui/react'
-import { Link } from '@tanstack/react-router'
-import { ArrowLeft, LoaderCircle, Plus, Save, Trash2 } from 'lucide-react'
+import { LoaderCircle, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { LocaleToggle } from './locale-toggle'
-import { ThemeToggle } from './theme-toggle'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Input } from './ui/input'
@@ -16,7 +13,7 @@ type Settings = {
   rules: Array<{ id: string; mailboxId: string | null; name: string | null; matchField: string; matchOperator: string; matchValue: string; action: string; folderId: string | null }>
 }
 
-export function SettingsApp() {
+export function SettingsApp({ section }: { section: 'profile' | 'mailboxes' | 'folders' | 'rules' }) {
   const { i18n } = useLingui()
   const [data, setData] = useState<Settings | null>(null)
   const [message, setMessage] = useState('')
@@ -39,18 +36,12 @@ export function SettingsApp() {
     if (response.ok) await load()
   }
 
-  if (!data) return <div className="grid h-dvh place-items-center"><LoaderCircle className="animate-spin" /></div>
+  if (!data) return <div className="grid min-h-64 place-items-center"><LoaderCircle className="animate-spin" /></div>
   return (
-    <main className="min-h-dvh bg-muted p-3 md:p-8">
-      <div className="mx-auto max-w-5xl space-y-5">
-        <header className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="icon"><Link to="/inbox" aria-label={i18n._('Back to inbox')}><ArrowLeft /></Link></Button>
-          <h1 className="text-2xl font-semibold"><Trans id="Settings" /></h1>
-          <div className="ml-auto flex gap-2"><LocaleToggle /><ThemeToggle /></div>
-        </header>
-        {message && <p role="status" className="rounded-md bg-background p-3 text-sm">{message}</p>}
+    <>
+      {message && <p role="status" className="rounded-md bg-background p-3 text-sm">{message}</p>}
 
-        <Card>
+      {section === 'profile' && <Card>
           <CardHeader><CardTitle><Trans id="Profile" /></CardTitle><CardDescription>{data.profile.email}</CardDescription></CardHeader>
           <CardContent className="grid gap-6">
             <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void update({ type: 'profile', name: form.get('name'), resetEmail: form.get('resetEmail'), forwardingEmail: form.get('forwardingEmail') }) }}>
@@ -61,32 +52,32 @@ export function SettingsApp() {
             </form>
             <PasswordForm />
           </CardContent>
-        </Card>
+      </Card>}
 
-        {data.mailboxes.map((mailbox) => {
+      {section !== 'profile' && data.mailboxes.map((mailbox) => {
           const boxFolders = data.folders.filter((folder) => folder.mailboxId === mailbox.id)
           const boxRules = data.rules.filter((rule) => rule.mailboxId === mailbox.id)
           return (
             <Card key={mailbox.id}>
-              <CardHeader><CardTitle>{mailbox.localPart}@{mailbox.hostname}</CardTitle><CardDescription><Trans id="Mailbox settings" /></CardDescription></CardHeader>
+              <CardHeader><CardTitle>{mailbox.localPart}@{mailbox.hostname}</CardTitle><CardDescription><Trans id={section === 'mailboxes' ? 'Mailbox settings' : section === 'folders' ? 'Custom folders' : 'Inbox rules'} /></CardDescription></CardHeader>
               <CardContent className="grid gap-8">
-                <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void update({ type: 'mailbox', mailboxId: mailbox.id, displayName: form.get('displayName'), signature: form.get('signature'), autoReplyEnabled: form.get('autoReplyEnabled') === 'on', autoReplySubject: form.get('autoReplySubject'), autoReplyBody: form.get('autoReplyBody') }) }}>
+                {section === 'mailboxes' && <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void update({ type: 'mailbox', mailboxId: mailbox.id, displayName: form.get('displayName'), signature: form.get('signature'), autoReplyEnabled: form.get('autoReplyEnabled') === 'on', autoReplySubject: form.get('autoReplySubject'), autoReplyBody: form.get('autoReplyBody') }) }}>
                   <Field label="Display name" name="displayName" defaultValue={mailbox.displayName ?? ''} />
                   <TextArea label="Signature" name="signature" defaultValue={mailbox.signature ?? ''} />
                   <label className="flex items-center gap-2 text-sm font-medium"><input name="autoReplyEnabled" type="checkbox" defaultChecked={mailbox.autoReplyEnabled} /><Trans id="Automatic reply" /></label>
                   <Field label="Automatic reply subject" name="autoReplySubject" defaultValue={mailbox.autoReplySubject} />
                   <TextArea label="Automatic reply message" name="autoReplyBody" defaultValue={mailbox.autoReplyBody} />
                   <Button className="w-fit"><Save /><Trans id="Save mailbox" /></Button>
-                </form>
+                </form>}
 
-                <section className="grid gap-3"><h3 className="font-semibold"><Trans id="Custom folders" /></h3>
+                {section === 'folders' && <section className="grid gap-3"><h3 className="font-semibold"><Trans id="Custom folders" /></h3>
                   <div className="flex flex-wrap gap-2">{boxFolders.map((folder) => <span key={folder.id} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm"><span className="size-2 rounded-full" style={{ backgroundColor: folder.color }} />{folder.name}<button type="button" onClick={() => remove('folder', folder.id)} aria-label={i18n._('Delete')}><Trash2 className="size-3" /></button></span>)}</div>
                   <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void update({ type: 'folder', mailboxId: mailbox.id, name: form.get('name'), color: form.get('color') }); event.currentTarget.reset() }}>
                     <Field label="Folder name" name="name" required /><label className="grid gap-2 text-sm font-medium"><Trans id="Color" /><input className="h-10 w-16 rounded-md border" type="color" name="color" defaultValue="#2563eb" /></label><Button><Plus /><Trans id="Add folder" /></Button>
                   </form>
-                </section>
+                </section>}
 
-                <section className="grid gap-3"><h3 className="font-semibold"><Trans id="Inbox rules" /></h3>
+                {section === 'rules' && <section className="grid gap-3"><h3 className="font-semibold"><Trans id="Inbox rules" /></h3>
                   <div className="grid gap-2">{boxRules.map((rule) => <div key={rule.id} className="flex items-center rounded-md border p-3 text-sm"><span>{rule.name}: {rule.matchField} {rule.matchOperator} “{rule.matchValue}” → {rule.action}</span><Button className="ml-auto" variant="ghost" size="icon" onClick={() => remove('rule', rule.id)} aria-label={i18n._('Delete')}><Trash2 /></Button></div>)}</div>
                   <form className="grid gap-3 md:grid-cols-3" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void update({ type: 'rule', mailboxId: mailbox.id, name: form.get('name'), matchField: form.get('matchField'), matchOperator: form.get('matchOperator'), matchValue: form.get('matchValue'), action: form.get('action'), folderId: form.get('folderId') || null }); event.currentTarget.reset() }}>
                     <Field label="Rule name" name="name" required />
@@ -97,13 +88,12 @@ export function SettingsApp() {
                     <label className="grid gap-2 text-sm font-medium"><Trans id="Destination folder" /><select name="folderId" className="h-10 rounded-md border bg-background px-3"><option value="">—</option>{boxFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>
                     <Button className="w-fit"><Plus /><Trans id="Add rule" /></Button>
                   </form>
-                </section>
+                </section>}
               </CardContent>
             </Card>
           )
         })}
-      </div>
-    </main>
+    </>
   )
 }
 

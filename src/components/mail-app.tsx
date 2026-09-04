@@ -189,9 +189,9 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                 {mailboxes.map((mailbox) => <SelectItem key={mailbox.id} value={mailbox.id}>{mailbox.name || mailbox.address}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button asChild variant="ghost" className="justify-start"><Link to="/settings"><Settings /><Trans id="Settings" /></Link></Button>
-            <Button asChild variant="ghost" className="justify-start"><Link to="/tools"><Wrench /><Trans id="Tools" /></Link></Button>
-            {session?.user.role === 'admin' && <Button asChild variant="ghost" className="justify-start"><Link to="/admin"><ShieldAlert /><Trans id="Administration" /></Link></Button>}
+            <Button asChild variant="ghost" className="justify-start"><Link to="/settings/$section" params={{ section: 'profile' }}><Settings /><Trans id="Settings" /></Link></Button>
+            <Button asChild variant="ghost" className="justify-start"><Link to="/tools/$section" params={{ section: 'contacts' }}><Wrench /><Trans id="Tools" /></Link></Button>
+            {session?.user.role === 'admin' && <Button asChild variant="ghost" className="justify-start"><Link to="/admin/$section" params={{ section: 'accounts' }}><ShieldAlert /><Trans id="Administration" /></Link></Button>}
             <Button variant="ghost" className="justify-start" onClick={logout}><LogOut /><Trans id="Sign out" /></Button>
           </div>
         </aside>
