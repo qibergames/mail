@@ -22,6 +22,7 @@ export function ThemeToggle() {
           size="icon-sm"
           className="rounded-lg"
           aria-label={value}
+          title={value}
           aria-pressed={theme === value}
           onClick={() => setTheme(value)}
         >

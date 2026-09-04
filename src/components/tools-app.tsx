@@ -160,7 +160,7 @@ export function ToolsApp({ section }: { section: ToolsSection }) {
     {section === 'webhooks' && <>
       {data.webhooks.length > 0 && <div className="grid gap-2">
         {data.webhooks.map((hook) => <Row key={hook.id} icon={Webhook} title={hook.description || hook.url} meta={`${hook.url} · ${(JSON.parse(hook.events) as Array<string>).join(', ')}`} extra={data.deliveries.filter((delivery) => delivery.webhookId === hook.id).slice(0, 1).map((delivery) => <small key={delivery.id} className="mt-1 block text-muted-foreground">{delivery.eventType}: {delivery.status} ({delivery.attempts}) {delivery.error}</small>)} actions={<>
-          <Button size="icon" variant="ghost" onClick={() => post({ action: 'webhook:test', id: hook.id })} aria-label={i18n._('Test')}><Play /></Button>
+          <Button size="icon" variant="ghost" onClick={() => post({ action: 'webhook:test', id: hook.id })} aria-label={i18n._('Test')} title={i18n._('Test')}><Play /></Button>
           <Delete onClick={() => remove('webhook', hook.id)} />
         </>} />)}
       </div>}
@@ -249,5 +249,5 @@ function Row({ icon: Icon, title, meta, extra, badges, actions }: { icon: Lucide
 
 function Delete({ onClick }: { onClick: () => void }) {
   const { i18n } = useLingui()
-  return <Button type="button" size="icon" variant="ghost" className="text-muted-foreground hover:bg-red-500/10 hover:text-red-600" onClick={onClick} aria-label={i18n._('Delete')}><Trash2 /></Button>
+  return <Button type="button" size="icon" variant="ghost" className="text-muted-foreground hover:bg-red-500/10 hover:text-red-600" onClick={onClick} aria-label={i18n._('Delete')} title={i18n._('Delete')}><Trash2 /></Button>
 }

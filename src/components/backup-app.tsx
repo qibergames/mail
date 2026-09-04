@@ -77,7 +77,7 @@ export function BackupApp() {
 
     {data && <div className="grid gap-4 md:gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
       <Card className="overflow-hidden rounded-2xl">
-        <CardHeader className="flex-row items-center border-b pb-4"><div><CardTitle className="text-xl"><Trans id="Backup history" /></CardTitle><CardDescription><Trans id="Completed backups can be downloaded as JSON." /></CardDescription></div><Button className="ml-auto" size="icon" variant="ghost" onClick={load} aria-label={i18n._('Refresh')}><RefreshCw /></Button></CardHeader>
+        <CardHeader className="flex-row items-center border-b pb-4"><div><CardTitle className="text-xl"><Trans id="Backup history" /></CardTitle><CardDescription><Trans id="Completed backups can be downloaded as JSON." /></CardDescription></div><Button className="ml-auto" size="icon" variant="ghost" onClick={load} aria-label={i18n._('Refresh')} title={i18n._('Refresh')}><RefreshCw /></Button></CardHeader>
         <CardContent className="grid gap-3 p-4">
           {data.backups.length === 0 && <EmptyState icon={DatabaseBackup}><Trans id="No backups yet." /></EmptyState>}
           {data.backups.map((backup) => <article key={backup.id} className="flex flex-col gap-3 rounded-xl border bg-background p-4 shadow-xs sm:flex-row sm:items-center">

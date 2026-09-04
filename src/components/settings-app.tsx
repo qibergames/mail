@@ -113,7 +113,7 @@ export function SettingsApp({ section }: { section: SettingsSection }) {
                 {boxFolders.length > 0 && <div className="flex flex-wrap gap-2">
                   {boxFolders.map((folder) => <span key={folder.id} className="inline-flex items-center gap-2 rounded-full border bg-background py-1 pr-1.5 pl-3 text-sm font-medium shadow-xs">
                     <span className="size-2.5 rounded-full" style={{ backgroundColor: folder.color }} />{folder.name}
-                    <button type="button" className="grid size-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600" onClick={() => remove('folder', folder.id)} aria-label={i18n._('Delete')}><Trash2 className="size-3.5" /></button>
+                    <button type="button" className="grid size-6 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-600" onClick={() => remove('folder', folder.id)} aria-label={i18n._('Delete')} title={i18n._('Delete')}><Trash2 className="size-3.5" /></button>
                   </span>)}
                 </div>}
                 <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void update({ type: 'folder', mailboxId: mailbox.id, name: form.get('name'), color: form.get('color') }); event.currentTarget.reset() }}>
@@ -128,7 +128,7 @@ export function SettingsApp({ section }: { section: SettingsSection }) {
                   {boxRules.map((rule) => <div key={rule.id} className="flex items-center gap-3 rounded-xl border bg-background p-3 text-sm shadow-xs">
                     <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><ListFilter className="size-4" /></span>
                     <span className="min-w-0 flex-1"><strong className="font-medium">{rule.name}</strong><small className="block truncate text-muted-foreground">{rule.matchField} {rule.matchOperator} “{rule.matchValue}” → {rule.action}</small></span>
-                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-red-500/10 hover:text-red-600" onClick={() => remove('rule', rule.id)} aria-label={i18n._('Delete')}><Trash2 /></Button>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-red-500/10 hover:text-red-600" onClick={() => remove('rule', rule.id)} aria-label={i18n._('Delete')} title={i18n._('Delete')}><Trash2 /></Button>
                   </div>)}
                 </div>}
                 <form className="grid gap-3 md:grid-cols-3" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void update({ type: 'rule', mailboxId: mailbox.id, name: form.get('name'), matchField: form.get('matchField'), matchOperator: form.get('matchOperator'), matchValue: form.get('matchValue'), action: form.get('action'), folderId: form.get('folderId') || null }); event.currentTarget.reset() }}>

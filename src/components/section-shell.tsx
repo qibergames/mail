@@ -12,7 +12,7 @@ export function SectionShell({ area, title, items }: { area: 'settings' | 'tools
   return <main className="min-h-dvh bg-muted p-3 md:p-6 dark:bg-background">
     <div className="mx-auto max-w-7xl space-y-4 md:space-y-6">
       <header className="flex items-center gap-3">
-        <Button asChild variant="outline" size="icon" className="rounded-xl shadow-xs"><Link to="/inbox" aria-label={i18n._('Back to inbox')}><ArrowLeft /></Link></Button>
+        <Button asChild variant="outline" size="icon" className="rounded-xl shadow-xs"><Link to="/inbox" aria-label={i18n._('Back to inbox')} title={i18n._('Back to inbox')}><ArrowLeft /></Link></Button>
         <h1 className="text-2xl font-bold tracking-tight"><Trans id={title} /></h1>
       </header>
       <div className="grid items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-6">

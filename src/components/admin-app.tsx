@@ -90,13 +90,14 @@ export function AdminApp({ section }: { section: AdminSection }) {
 }
 
 function AdminModal({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
+  const { i18n } = useLingui()
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     if (open && !ref.current?.open) ref.current?.showModal()
     if (!open && ref.current?.open) ref.current.close()
   }, [open])
   return <dialog ref={ref} onCancel={onClose} className="m-auto max-h-[calc(100dvh-2rem)] w-[min(36rem,calc(100%-2rem))] overflow-y-auto rounded-2xl border bg-background p-0 text-foreground shadow-2xl backdrop:bg-black/50 backdrop:backdrop-blur-sm">
-    <div className="flex items-center border-b px-5 py-4"><h2 className="text-xl font-semibold">{title}</h2><Button className="ml-auto" type="button" size="icon" variant="ghost" onClick={onClose}><X /><span className="sr-only"><Trans id="Close" /></span></Button></div>
+    <div className="flex items-center border-b px-5 py-4"><h2 className="text-xl font-semibold">{title}</h2><Button className="ml-auto" type="button" size="icon" variant="ghost" onClick={onClose} title={i18n._('Close')}><X /><span className="sr-only"><Trans id="Close" /></span></Button></div>
     <div className="p-5">{children}</div>
   </dialog>
 }
