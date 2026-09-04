@@ -34,7 +34,7 @@ export function SectionShell({ area, title, items }: { area: 'settings' | 'tools
 
 function SectionLink({ area, item }: { area: 'settings' | 'tools' | 'admin'; item: SectionNavItem }) {
   const content = <><item.icon className="size-4" /><Trans id={item.label} /></>
-  const props = { className: 'flex min-h-9 min-w-0 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground [&.active]:bg-primary [&.active]:text-primary-foreground [&.active]:shadow-sm [&>svg]:shrink-0', activeOptions: { exact: true } }
+  const props = { className: 'flex min-h-9 min-w-0 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground [&.active]:bg-primary [&.active]:text-primary-foreground [&.active]:shadow-sm [&>svg]:shrink-0' }
   if (area === 'settings') return <Link to="/settings/$section" params={{ section: item.section }} {...props}>{content}</Link>
   if (area === 'tools') return <Link to="/tools/$section" params={{ section: item.section }} {...props}>{content}</Link>
   return <Link to="/admin/$section" params={{ section: item.section }} {...props}>{content}</Link>

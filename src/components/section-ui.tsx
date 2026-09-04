@@ -45,8 +45,8 @@ export function ItemGrid({ children }: { children: React.ReactNode }) {
   return <div className="grid gap-3 md:grid-cols-2">{children}</div>
 }
 
-export function ItemCard({ icon: Icon, title, description, meta, badges, actions }: { icon: LucideIcon; title: string; description?: string; meta?: string | null; badges?: React.ReactNode; actions?: React.ReactNode }) {
-  return <article className="flex min-w-0 gap-3 rounded-2xl border bg-card p-4 shadow-xs transition-shadow hover:shadow-md">
+export function ItemCard({ icon: Icon, title, description, meta, badges, actions }: { icon: LucideIcon; title: React.ReactNode; description?: string; meta?: string | null; badges?: React.ReactNode; actions?: React.ReactNode }) {
+  return <article className="relative flex min-w-0 gap-3 rounded-2xl border bg-card p-4 shadow-xs transition-shadow hover:shadow-md">
     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground"><Icon className="size-5" /></span>
     <div className="min-w-0 flex-1">
       <h3 className="truncate font-semibold">{title}</h3>

@@ -122,3 +122,79 @@ export async function deleteMailboxRoute(env: CloudflareEnv, zoneId: string, rul
 export async function deleteSendingSubdomain(env: CloudflareEnv, zoneId: string, tag: string) {
   return cfRequest<unknown>(env, `/zones/${zoneId}/email/sending/subdomains/${tag}`, { method: 'DELETE' })
 }
+
+type DnsRecord = { type: string; name: string; content: string; priority?: number; ttl?: number }
+type RoutingRule = { id?: string; tag?: string; name?: string; enabled?: boolean; matchers?: Array<{ type: string; field?: string; value?: string }>; actions?: Array<{ type: string; value?: string[] }> }
+
+export type DomainDnsCheck = { kind: 'mx' | 'spf' | 'dkim' | 'dmarc'; name: string; ok: boolean; records: string[] }
+
+export type DomainInspection = {
+  routing: { enabled: boolean; status: string | null; modified: string | null } | null
+  requiredRecords: DnsRecord[]
+  missingRecords: DnsRecord[]
+  rules: Array<{ id: string; name: string; enabled: boolean; matchers: string[]; actions: string[] }>
+  catchAll: { enabled: boolean; actions: string[] } | null
+  sending: { tag: string; enabled: boolean; status: string | null } | null
+  checks: DomainDnsCheck[]
+  errors: string[]
+}
+
+function describeMatcher(matcher: { type: string; field?: string; value?: string }) {
+  return matcher.type === 'all' ? 'all' : `${matcher.field ?? matcher.type} = ${matcher.value ?? ''}`
+}
+
+function describeAction(action: { type: string; value?: string[] }) {
+  return action.value?.length ? `${action.type}: ${action.value.join(', ')}` : action.type
+}
+
+async function dnsRecords(env: CloudflareEnv, zoneId: string, name: string) {
+  return cfRequest<DnsRecord[]>(env, `/zones/${zoneId}/dns_records?name=${encodeURIComponent(name)}&per_page=100`)
+}
+
+export async function inspectDomain(env: CloudflareEnv, zoneId: string, hostname: string): Promise<DomainInspection> {
+  const errors: string[] = []
+  const attempt = async <T,>(label: string, run: () => Promise<T>): Promise<T | null> => {
+    try { return await run() } catch (error) { errors.push(`${label}: ${error instanceof Error ? error.message : String(error)}`); return null }
+  }
+  const zone = await attempt('zone', () => cfRequest<{ name: string }>(env, `/zones/${zoneId}`))
+  const isSubdomain = Boolean(zone && zone.name !== hostname)
+
+  const [routing, dns, rules, catchAll, subdomains, host, dmarc, dkim] = await Promise.all([
+    attempt('routing', () => cfRequest<{ enabled?: boolean; status?: string; modified?: string }>(env, `/zones/${zoneId}/email/routing`)),
+    attempt('dns', () => cfRequest<DnsRecord[] | { record?: DnsRecord[]; errors?: Array<{ code?: string; missing?: DnsRecord }> }>(env, `/zones/${zoneId}/email/routing/dns${isSubdomain ? `?subdomain=${encodeURIComponent(hostname)}` : ''}`)),
+    attempt('rules', () => cfRequest<RoutingRule[]>(env, `/zones/${zoneId}/email/routing/rules?per_page=50`)),
+    attempt('catch-all', () => cfRequest<RoutingRule>(env, `/zones/${zoneId}/email/routing/rules/catch_all`)),
+    isSubdomain ? attempt('sending', () => cfRequest<Array<{ tag: string; name: string; enabled: boolean; status?: string }>>(env, `/zones/${zoneId}/email/sending/subdomains`)) : Promise.resolve(null),
+    attempt('dns records', () => dnsRecords(env, zoneId, hostname)),
+    attempt('dmarc record', () => dnsRecords(env, zoneId, `_dmarc.${hostname}`)),
+    attempt('dkim record', () => dnsRecords(env, zoneId, `cf2024-1._domainkey.${hostname}`)),
+  ])
+
+  const requiredRecords = Array.isArray(dns) ? dns : dns?.record ?? []
+  const missingRecords = Array.isArray(dns) ? [] : (dns?.errors ?? []).flatMap((item) => item.missing ? [item.missing] : [])
+  const suffix = `@${hostname}`
+  const domainRules = (rules ?? []).filter((rule) => rule.matchers?.some((matcher) => matcher.type === 'all' || matcher.value?.toLowerCase().endsWith(suffix)))
+
+  const mx = (host ?? []).filter((record) => record.type === 'MX').map((record) => `${record.priority ?? ''} ${record.content}`.trim())
+  const spf = (host ?? []).filter((record) => record.type === 'TXT' && /v=spf1/i.test(record.content)).map((record) => record.content)
+  const dkimRecords = (dkim ?? []).filter((record) => record.type === 'TXT' || record.type === 'CNAME').map((record) => record.content)
+  const dmarcRecords = (dmarc ?? []).filter((record) => record.type === 'TXT').map((record) => record.content)
+  const checks: DomainDnsCheck[] = [
+    { kind: 'mx', name: hostname, ok: mx.some((value) => /mx\.cloudflare\.net/i.test(value)), records: mx },
+    { kind: 'spf', name: hostname, ok: spf.some((value) => /_spf\.mx\.cloudflare\.net/i.test(value)), records: spf },
+    { kind: 'dkim', name: `cf2024-1._domainkey.${hostname}`, ok: dkimRecords.some((value) => /v=DKIM1|dkim/i.test(value)), records: dkimRecords },
+    { kind: 'dmarc', name: `_dmarc.${hostname}`, ok: dmarcRecords.some((value) => /v=DMARC1/i.test(value)), records: dmarcRecords },
+  ]
+
+  const sendingSubdomain = subdomains?.find((item) => item.name === hostname)
+  return {
+    routing: routing ? { enabled: routing.enabled ?? false, status: routing.status ?? null, modified: routing.modified ?? null } : null,
+    requiredRecords,
+    missingRecords,
+    rules: domainRules.map((rule) => ({ id: rule.id ?? rule.tag ?? '', name: rule.name ?? '', enabled: rule.enabled ?? false, matchers: (rule.matchers ?? []).map(describeMatcher), actions: (rule.actions ?? []).map(describeAction) })),
+    catchAll: catchAll ? { enabled: catchAll.enabled ?? false, actions: (catchAll.actions ?? []).map(describeAction) } : null,
+    sending: sendingSubdomain ? { tag: sendingSubdomain.tag, enabled: sendingSubdomain.enabled, status: sendingSubdomain.status ?? null } : null,
+    checks,
+    errors,
+  }
+}

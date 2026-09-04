@@ -1,6 +1,7 @@
 import { Trans, useLingui } from '@lingui/react'
 import type { LucideIcon } from 'lucide-react'
-import { AtSign, Globe2, LoaderCircle, Mail, Plus, Route as RouteIcon, ScrollText, UserRoundCheck, UserRoundCog, UserRoundX, Users, X } from 'lucide-react'
+import { AtSign, ChevronRight, Globe2, LoaderCircle, Mail, Plus, Route as RouteIcon, ScrollText, UserRoundCheck, UserRoundCog, UserRoundX, Users, X } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import type { Status } from './section-ui'
 import { Badge, CheckboxField, EmptyState, Field, ItemCard, ItemGrid, Loading, SectionHeader, SelectField, StatusBanner } from './section-ui'
@@ -70,7 +71,7 @@ export function AdminApp({ section }: { section: AdminSection }) {
     <section className="space-y-4">
       {items === 0 && <EmptyState icon={details.icon}><Trans id="No records yet." /></EmptyState>}
       {section === 'accounts' && <ItemGrid>{data.users.map((user) => <ItemCard key={user.id} icon={Users} title={user.name} description={user.email} badges={<><Badge>{user.role}</Badge>{user.banned && <Badge danger><Trans id="Disabled" /></Badge>}</>} actions={<><Button size="sm" variant="outline" disabled={busy} onClick={() => post({ action: 'user:role', userId: user.id, role: user.role === 'admin' ? 'user' : 'admin' })}>{user.role === 'admin' ? <Trans id="Make user" /> : <Trans id="Make admin" />}</Button><Button size="icon-sm" variant="ghost" disabled={busy} onClick={() => post({ action: 'user:ban', userId: user.id, banned: !user.banned })} aria-label={i18n._(user.banned ? 'Enable account' : 'Disable account')}>{user.banned ? <UserRoundCheck /> : <UserRoundX />}</Button></>} />)}</ItemGrid>}
-      {section === 'domains' && <ItemGrid>{data.domains.map((domain) => <ItemCard key={domain.id} icon={Globe2} title={domain.hostname} description={domain.status} badges={<><Badge active={domain.routingEnabled}>routing</Badge><Badge active={domain.sendingEnabled}>sending</Badge></>} />)}</ItemGrid>}
+      {section === 'domains' && <ItemGrid>{data.domains.map((domain) => <ItemCard key={domain.id} icon={Globe2} title={<Link to="/admin/domains/$domainId" params={{ domainId: domain.id }} className="after:absolute after:inset-0 hover:underline">{domain.hostname}</Link>} description={i18n._(domain.status)} badges={<><Badge active={domain.routingEnabled}>routing</Badge><Badge active={domain.sendingEnabled}>sending</Badge></>} actions={<ChevronRight className="size-4 text-muted-foreground" />} />)}</ItemGrid>}
       {section === 'mailboxes' && <ItemGrid>{data.mailboxes.map((mailbox) => <ItemCard key={mailbox.id} icon={Mail} title={`${mailbox.localPart}@${mailbox.hostname}`} description={mailbox.displayName || data.users.find((user) => user.id === mailbox.userId)?.name || '—'} badges={<Badge>{mailbox.type}</Badge>} />)}</ItemGrid>}
       {section === 'aliases' && <ItemGrid>{data.aliases.map((alias) => <ItemCard key={alias.id} icon={AtSign} title={`${alias.localPart}@${data.domains.find((domain) => domain.id === alias.domainId)?.hostname}`} description={`→ ${mailboxAddress(data, alias.mailboxId)}`} />)}</ItemGrid>}
       {section === 'access' && <ItemGrid>{data.access.map((access) => <ItemCard key={access.id} icon={UserRoundCog} title={data.users.find((user) => user.id === access.userId)?.name || access.userId} description={mailboxAddress(data, access.mailboxId)} badges={<Badge>{access.permission}</Badge>} />)}</ItemGrid>}
