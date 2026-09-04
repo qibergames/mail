@@ -16,7 +16,7 @@ async function handlePost(request: Request) {
         headers: { 'Retry-After': '60' },
       })
     }
-    if (!(await verifyTurnstile(request, request.headers.get('x-turnstile-token')))) {
+    if (!(await verifyTurnstile(request, request.headers.get('x-turnstile-token'))).success) {
       return Response.json({ code: 'VERIFICATION_FAILED', message: 'Verification failed' }, { status: 400 })
     }
   }

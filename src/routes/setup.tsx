@@ -13,6 +13,7 @@ export const Route = createFileRoute('/setup')({ component: SetupPage })
 function SetupPage() {
   const { i18n } = useLingui()
   const [token, setToken] = useState('')
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -28,8 +29,11 @@ function SetupPage() {
     })
     setLoading(false)
     if (response.ok) return location.assign('/inbox')
-    const result = (await response.json().catch(() => null)) as { message?: string } | null
-    setError(result?.message ?? i18n._('Setup failed'))
+    const result = (await response.json().catch(() => null)) as { message?: string; error?: string; codes?: string[] } | null
+    const details = [result?.error, ...(result?.codes ?? [])].filter(Boolean).join(': ')
+    setError(result?.message ?? `${i18n._('Setup failed')}${details ? `: ${details}` : ''}`)
+    setToken('')
+    setTurnstileAttempt((attempt) => attempt + 1)
   }
 
   return (
@@ -46,7 +50,7 @@ function SetupPage() {
             </div>
             <div className="grid gap-2"><Label htmlFor="resetEmail"><Trans id="Recovery email" /></Label><Input id="resetEmail" name="resetEmail" type="email" autoComplete="email" required /></div>
             <div className="grid gap-2"><Label htmlFor="password"><Trans id="Password" /></Label><Input id="password" name="password" type="password" autoComplete="new-password" minLength={12} required /></div>
-            <Turnstile onToken={setToken} />
+            <Turnstile key={turnstileAttempt} onToken={setToken} />
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             <Button type="submit" disabled={loading || !token}>{loading ? <Trans id="Setting up…" /> : <Trans id="Create QiberMail" />}</Button>
           </form>

@@ -1,12 +1,16 @@
 import { newId } from './ids'
 
-type TurnstileResult = { success: boolean }
+type TurnstileResult = { success: boolean; 'error-codes'?: string[] }
 
-export async function verifyTurnstile(request: Request, token: unknown) {
+export type TurnstileVerification = { success: boolean; errorCodes: string[] }
+
+export async function verifyTurnstile(request: Request, token: unknown): Promise<TurnstileVerification> {
   const { env } = await import('cloudflare:workers')
   const secret = env.TURNSTILE_SECRET_KEY?.trim()
-  if (!secret) return true
-  if (typeof token !== 'string' || !token.trim() || token.length > 2048) return false
+  if (!secret) return { success: true, errorCodes: [] }
+  if (typeof token !== 'string' || !token.trim() || token.length > 2048) {
+    return { success: false, errorCodes: ['missing-input-response'] }
+  }
 
   try {
     const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
@@ -20,8 +24,15 @@ export async function verifyTurnstile(request: Request, token: unknown) {
         idempotency_key: newId('ts'),
       }),
     })
-    return response.ok && (await response.json<TurnstileResult>()).success
-  } catch {
-    return false
+    const result = await response.json<TurnstileResult>()
+    const verification = {
+      success: response.ok && result.success,
+      errorCodes: result['error-codes'] ?? (response.ok ? [] : [`http-${response.status}`]),
+    }
+    if (!verification.success) console.warn('Turnstile verification failed', verification)
+    return verification
+  } catch (error) {
+    console.error('Turnstile Siteverify unavailable', error)
+    return { success: false, errorCodes: ['internal-error'] }
   }
 }

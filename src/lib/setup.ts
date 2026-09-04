@@ -37,8 +37,9 @@ export async function runSetup(request: Request) {
 
   const parsed = setupSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'invalid_setup', details: parsed.error.flatten() }, { status: 400 })
-  if (!(await verifyTurnstile(request, parsed.data.turnstileToken))) {
-    return Response.json({ error: 'verification_failed' }, { status: 400 })
+  const verification = await verifyTurnstile(request, parsed.data.turnstileToken)
+  if (!verification.success) {
+    return Response.json({ error: 'verification_failed', codes: verification.errorCodes }, { status: 400 })
   }
 
   const db = getDb()

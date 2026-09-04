@@ -18,6 +18,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 7. PWA és push | `done` | Standalone PWA, Web Push és deep link |
 | 8. Stabilizálás | `done` | 12 teszt, friss-D1 próba, build és deploy dry-run |
 | 9. Éles helyreállítás | `done` | D1 migráció, runtime Turnstile és production smoke |
+| 10. Setup diagnosztika | `done` | Siteverify hibakódok és automatikus token-reset |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -133,6 +134,15 @@ Ellenőrzőkapu: production `/` átirányítás, `/setup` 200, migrációlista, 
 
 Eredmény: az éles root 307-tel a setupra irányít, a setup 200, a D1 naprakész, a Turnstile key elérhető és a Worker `0155bf11-056a-41f5-b349-2aa0b391bbac` verziója fut.
 
+## 10. fázis – Setup diagnosztika `done`
+
+- A Turnstile Siteverify hibakódjai token és secret naplózása nélkül bekerülnek a strukturált Worker logba és a setup hibaválaszába.
+- Sikertelen setup után a kliens kiírja a technikai hibakódot, eldobja az egyszer használható tokent és új widgetet kér.
+
+Ellenőrzőkapu: TypeScript, ESLint, 12 Bun-teszt és production build.
+
+Eredmény: minden ellenőrzés zöld; a következő éles próbálkozás már pontos okot mutat a generikus hiba helyett.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -150,3 +160,4 @@ Eredmény: az éles root 307-tel a setupra irányít, a setup 200, a D1 napraké
 - 2026-09-04: 5–7. fázis lezárva. Reszponzív kliens, beállítások/admin/eszközök, shared funkciók, PWA és Web Push elkészült.
 - 2026-09-04: 8. fázis helyi kapui lezárva. 12/12 teszt, TypeScript, lint, build, friss D1 és Wrangler dry-run sikeres; éles account/telefon validáció `pending_external`.
 - 2026-09-04: 9. fázis lezárva. A hiányzó production D1 migráció és a Turnstile build/runtime eltérés javítva; az éles setup smoke zöld.
+- 2026-09-04: 10. fázis lezárva. A setup és Turnstile hibák biztonságosan diagnosztizálhatók, a felhasznált token automatikusan megújul.
