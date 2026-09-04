@@ -21,6 +21,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 10. Setup diagnosztika | `done` | Siteverify hibakódok és automatikus token-reset |
 | 11. Turnstile lifecycle | `done` | Lejárat-, timeout- és újrapróbálkozás-kezelés |
 | 12. UI finomhangolás | `done` | Shadcn postaláda-select és könnyebb kapcsolók |
+| 13. MBOX import | `done` | Közvetlen, kötegelt MBOX import deduplikálással |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -99,7 +100,7 @@ Eredmény: desktop split-view és mobil drawer, nyolc rendszermappa, egyedi mapp
 
 Ellenőrzőkapu: jogosultsági mátrix, API scope-ok, backup restore, webhook retry és nulla licenchivatkozás.
 
-Eredmény: adminból kezelhető account/szerepkör/tiltás, domain, personal/shared mailbox, alias, delegált jogosultság és domain routing. A Tools felület kontaktokat/blokkolást, sablonokat, naptárt, scoped API-kulcsokat, signed webhookokat, EML/IMAP importot, MBOX exportot és admin backup/restore-t biztosít. A backup D1-ből privát R2-be készül Workflow-val, ütemezéssel és retentionnel. A brand a kért fix QiberMail; önfrissítő supply-chain endpoint nincs. A forrásban nincs Paymug-, licenctábla-, licenc-API- vagy feature-gate kód.
+Eredmény: adminból kezelhető account/szerepkör/tiltás, domain, personal/shared mailbox, alias, delegált jogosultság és domain routing. A Tools felület kontaktokat/blokkolást, sablonokat, naptárt, scoped API-kulcsokat, signed webhookokat, EML/MBOX/IMAP importot, MBOX exportot és admin backup/restore-t biztosít. A backup D1-ből privát R2-be készül Workflow-val, ütemezéssel és retentionnel. A brand a kért fix QiberMail; önfrissítő supply-chain endpoint nincs. A forrásban nincs Paymug-, licenctábla-, licenc-API- vagy feature-gate kód.
 
 ## 7. fázis – PWA és háttérértesítés `done`
 
@@ -164,6 +165,16 @@ Ellenőrzőkapu: TypeScript, ESLint, 12 Bun-teszt és production build.
 
 Eredmény: a sidebar vezérlői light/dark módban egységes shadcn megjelenést kaptak, minden ellenőrzés zöld.
 
+## 13. fázis – MBOX import `done`
+
+- A Tools felület közvetlenül fogad `.mbox`, `.mbx` és `.eml` fájlokat.
+- A böngésző a MBOX-ot Mailflare-kompatibilisen levelekre bontja, majd 20 levél/5 MiB kötegekben tölti fel.
+- A szerver ellenőrzi a típust és méretet, kihagyja a duplikált `Message-ID`-kat, és egy hibás levél mellett folytatja a köteget.
+
+Ellenőrzőkapu: TypeScript, ESLint, 14 Bun-teszt és production build.
+
+Eredmény: közvetlen MBOX import, kötegelt feltöltés, deduplikálás és hibás tételek összesítése elkészült.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -184,3 +195,4 @@ Eredmény: a sidebar vezérlői light/dark módban egységes shadcn megjelenést
 - 2026-09-04: 10. fázis lezárva. A setup és Turnstile hibák biztonságosan diagnosztizálhatók, a felhasznált token automatikusan megújul.
 - 2026-09-04: 11. fázis lezárva. A Turnstile lejárat/timeout callbackjei és token-reset bekerültek.
 - 2026-09-04: 12. fázis lezárva. A postaláda-választó és a fejléc kapcsolói shadcn stílusra lettek finomítva.
+- 2026-09-04: 13. fázis lezárva. A Mailflare-kompatibilis, kötegelt MBOX import elkészült.

@@ -11,7 +11,7 @@ QiberMail is a self-hosted, mobile-ready email application for custom domains on
 - attachments, reply/forward, signatures, automatic replies, forwarding and scheduled sending
 - mailbox and domain routing rules, aliases, contacts/blocklist, templates and calendar
 - scoped API keys, v1 message/send APIs, HMAC-signed retrying webhooks and audit log
-- manual/scheduled D1 backups in private R2, retention, restore, EML/IMAP import and MBOX export
+- manual/scheduled D1 backups in private R2, retention, restore, EML/MBOX/IMAP import and MBOX export
 - standalone PWA, no email body cache, and background push showing only sender and subject
 - Hungarian/English browser detection with Hungarian fallback and a saved language cookie
 - all application features available without Paymug, license keys or feature gates
