@@ -1,7 +1,7 @@
 import { Trans, useLingui } from '@lingui/react'
 import { Link } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
-import { AlertCircle, ArrowLeft, AtSign, CheckCircle2, CircleDashed, Globe2, Inbox, LoaderCircle, Mail, RefreshCw, Route as RouteIcon, Send, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { AlertCircle, ArrowLeft, AtSign, CheckCircle2, CircleDashed, Globe2, Inbox, LoaderCircle, Mail, RefreshCw, Route as RouteIcon, Send, ShieldCheck, TriangleAlert, Wrench } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { Status } from './section-ui'
 import { Badge, EmptyState, Loading, StatusBanner } from './section-ui'
@@ -35,12 +35,12 @@ export function DomainDetails({ domainId }: { domainId: string }) {
   }, [domainId])
   useEffect(() => { void load() }, [load])
 
-  async function sync() {
+  async function sync(action: 'sync' | 'sending:enable' = 'sync') {
     setBusy(true)
     setStatus(null)
-    const response = await fetch(`/api/admin/domains/${domainId}`, { method: 'POST' })
+    const response = await fetch(`/api/admin/domains/${domainId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) })
     const result = await response.json<DomainDetailsData & { error?: string }>().catch(() => null)
-    if (response.ok && result) { setData(result); setStatus({ tone: 'success', text: i18n._('Synced from Cloudflare') }) }
+    if (response.ok && result) { setData(result); setStatus({ tone: 'success', text: i18n._(action === 'sync' ? 'Synced from Cloudflare' : 'Email sending configured') }) }
     else setStatus({ tone: 'error', text: result?.error || i18n._('Sync failed') })
     setBusy(false)
   }
@@ -51,6 +51,8 @@ export function DomainDetails({ domainId }: { domainId: string }) {
   const { domain, cloudflare, stats } = data
   const format = (value: string | null | undefined) => value ? new Date(value).toLocaleString(i18n.locale) : '—'
   const healthy = cloudflare ? cloudflare.checks.filter((check) => check.ok).length : 0
+  const sendingMissing = cloudflare?.sendingRecords.filter((record) => !record.present) ?? []
+  const sendingReady = Boolean(cloudflare?.sending?.enabled) && sendingMissing.length === 0 && (cloudflare?.sendingRecords.length ?? 0) > 0
 
   return <>
     <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center">
@@ -98,10 +100,23 @@ export function DomainDetails({ domainId }: { domainId: string }) {
       <Panel icon={Send} title="Email Sending">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           <Term label="Enabled" /><dd>{(cloudflare?.sending?.enabled ?? domain.sendingEnabled) ? i18n._('Yes') : i18n._('No')}</dd>
-          <Term label="Status" /><dd>{cloudflare?.sending?.status ?? (domain.sendingSubdomainTag ? i18n._('Subdomain registered') : i18n._('Zone-level sending'))}</dd>
+          <Term label="Status" /><dd>{cloudflare ? (cloudflare.sending ? (sendingReady ? <Badge active>{i18n._('ready')}</Badge> : <Badge danger={!cloudflare.sending.enabled}>{cloudflare.sending.enabled ? i18n._('DNS incomplete') : i18n._('disabled')}</Badge>) : <Badge danger>{i18n._('not configured')}</Badge>) : '—'}</dd>
+          <Term label="DKIM selector" /><dd className="font-mono text-xs break-all">{cloudflare?.sending?.dkimSelector ?? '—'}</dd>
+          <Term label="Return path" /><dd className="font-mono text-xs break-all">{cloudflare?.sending?.returnPathDomain ?? '—'}</dd>
           <Term label="Subdomain tag" /><dd className="font-mono text-xs break-all">{cloudflare?.sending?.tag ?? domain.sendingSubdomainTag ?? '—'}</dd>
         </dl>
-        <ul className="mt-4 grid gap-2">
+        {cloudflare && !sendingReady && <div className="mt-4 flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm sm:flex-row sm:items-center">
+          <p className="flex flex-1 items-start gap-2 text-amber-700 dark:text-amber-400"><TriangleAlert className="mt-0.5 size-4 shrink-0" />{cloudflare.sending ? (cloudflare.sending.enabled ? i18n._('Some sending DNS records are missing, so outgoing mail may be rejected.') : i18n._('Email Sending is registered but disabled for this domain.')) : i18n._('Email Sending is not set up for this domain, so mail cannot be sent from it.')}</p>
+          <Button className="shrink-0" disabled={busy} onClick={() => void sync('sending:enable')}>{busy ? <LoaderCircle className="animate-spin" /> : <Wrench />}{cloudflare.sending?.enabled ? <Trans id="Repair sending DNS" /> : <Trans id="Enable sending" />}</Button>
+        </div>}
+        {cloudflare?.sendingRecords.length ? <ul className="mt-4 grid gap-2">
+          {cloudflare.sendingRecords.map((record, index) => <li key={index} className="rounded-xl border p-3 text-sm">
+            <p className="flex items-center gap-2 font-medium">{record.present ? <CheckCircle2 className="size-4 text-emerald-500" /> : <AlertCircle className="size-4 text-amber-500" />}{record.type}<span className="ml-auto truncate font-mono text-xs font-normal text-muted-foreground">{record.name}</span></p>
+            <p className="mt-1 pl-6 font-mono text-xs break-all text-muted-foreground">{record.priority !== undefined ? `${record.priority} ` : ''}{record.content}</p>
+          </li>)}
+        </ul> : null}
+        <h4 className="mt-5 mb-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase"><Trans id="Email Routing records" /></h4>
+        <ul className="grid gap-2">
           {cloudflare
             ? cloudflare.checks.map((check) => <li key={check.kind} className="rounded-xl border p-3 text-sm">
               <p className="flex items-center gap-2 font-medium">{check.ok ? <CheckCircle2 className="size-4 text-emerald-500" /> : <AlertCircle className="size-4 text-amber-500" />}<Trans id={checkLabels[check.kind]} /><span className="ml-auto font-mono text-xs font-normal text-muted-foreground">{check.name}</span></p>

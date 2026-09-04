@@ -2,7 +2,7 @@ type TurnstileResult = { success: boolean; 'error-codes'?: string[] }
 
 export type TurnstileVerification = { success: boolean; errorCodes: string[] }
 
-export async function verifyTurnstile(request: Request, token: unknown): Promise<TurnstileVerification> {
+export async function verifyTurnstile(_request: Request, token: unknown): Promise<TurnstileVerification> {
   const { env } = await import('cloudflare:workers')
   const secret = env.TURNSTILE_SECRET_KEY?.trim()
   if (!secret) return { success: true, errorCodes: [] }
@@ -15,11 +15,9 @@ export async function verifyTurnstile(request: Request, token: unknown): Promise
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(10_000),
-      body: JSON.stringify({
-        secret,
-        response: token,
-        remoteip: request.headers.get('cf-connecting-ip') ?? undefined,
-      }),
+      // remoteip is intentionally omitted: dual-stack clients can solve the challenge over IPv4 and
+      // submit over IPv6 (or vice versa), and a mismatch fails Siteverify for an otherwise valid token.
+      body: JSON.stringify({ secret, response: token }),
     })
     const result = await response.json<TurnstileResult>()
     const verification = {

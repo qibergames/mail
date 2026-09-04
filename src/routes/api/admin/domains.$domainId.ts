@@ -3,8 +3,8 @@ import { and, count, desc, eq } from 'drizzle-orm'
 import { env } from 'cloudflare:workers'
 import { getDb } from '@/db'
 import { auditLogs, domains, mailboxAliases, mailboxes, messages, outboundJobs, routingRules, users } from '@/db/schema'
-import { requireAdmin } from '@/lib/api-auth'
-import { inspectDomain } from '@/lib/cloudflare-api'
+import { errorResponse, requireAdmin } from '@/lib/api-auth'
+import { enableSending, inspectDomain } from '@/lib/cloudflare-api'
 import { newId } from '@/lib/ids'
 
 async function loadDomain(domainId: string) {
@@ -47,19 +47,32 @@ export const Route = createFileRoute('/api/admin/domains/$domainId')({
         return details ? Response.json(details) : Response.json({ error: 'Unknown domain' }, { status: 404 })
       },
       POST: async ({ request, params }) => {
-        const session = await requireAdmin(request)
-        const db = getDb()
-        const domain = (await db.select().from(domains).where(eq(domains.id, params.domainId)).limit(1)).at(0)
-        if (!domain) return Response.json({ error: 'Unknown domain' }, { status: 404 })
-        const inspection = await inspectDomain(env, domain.zoneId, domain.hostname)
-        if (!inspection.routing) return Response.json({ error: inspection.errors.join('; ') || 'Cloudflare API request failed' }, { status: 502 })
-        const routingEnabled = inspection.routing.enabled
-        const sendingEnabled = inspection.sending?.enabled ?? domain.sendingEnabled
-        const status = inspection.routing.status === 'ready' && routingEnabled ? 'active' : inspection.routing.status === 'misconfigured' ? 'error' : 'pending'
-        await db.update(domains).set({ routingEnabled, routingStatus: inspection.routing.status, sendingEnabled, sendingSubdomainTag: inspection.sending?.tag ?? domain.sendingSubdomainTag, status }).where(eq(domains.id, domain.id))
-        await db.insert(auditLogs).values({ id: newId('log'), actorUserId: session.user.id, action: 'domain:sync', metadata: JSON.stringify({ domainId: domain.id, status, routingEnabled, sendingEnabled }) })
-        return Response.json(await loadDomain(domain.id))
+        try {
+          return await syncDomain(request, params.domainId)
+        } catch (error) {
+          return errorResponse(error, 502)
+        }
       },
     },
   },
 })
+
+async function syncDomain(request: Request, domainId: string) {
+  const session = await requireAdmin(request)
+  const db = getDb()
+  const domain = (await db.select().from(domains).where(eq(domains.id, domainId)).limit(1)).at(0)
+  if (!domain) return Response.json({ error: 'Unknown domain' }, { status: 404 })
+  const body = await request.json<{ action?: string }>().catch((): { action?: string } => ({}))
+  const action = body.action === 'sending:enable' ? 'sending:enable' : 'sync'
+  if (action === 'sending:enable') {
+    try { await enableSending(env, domain.zoneId, domain.hostname) } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Cloudflare API request failed' }, { status: 502 }) }
+  }
+  const inspection = await inspectDomain(env, domain.zoneId, domain.hostname)
+  if (!inspection.routing) return Response.json({ error: inspection.errors.join('; ') || 'Cloudflare API request failed' }, { status: 502 })
+  const routingEnabled = inspection.routing.enabled
+  const sendingEnabled = inspection.sending?.enabled ?? domain.sendingEnabled
+  const status = inspection.routing.status === 'ready' && routingEnabled ? 'active' : inspection.routing.status === 'misconfigured' ? 'error' : 'pending'
+  await db.update(domains).set({ routingEnabled, routingStatus: inspection.routing.status, sendingEnabled, sendingSubdomainTag: inspection.sending?.tag ?? domain.sendingSubdomainTag, status }).where(eq(domains.id, domain.id))
+  await db.insert(auditLogs).values({ id: newId('log'), actorUserId: session.user.id, action: `domain:${action}`, metadata: JSON.stringify({ domainId: domain.id, status, routingEnabled, sendingEnabled }) })
+  return Response.json(await loadDomain(domain.id))
+}

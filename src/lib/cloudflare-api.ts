@@ -103,16 +103,33 @@ export async function provisionDomain(env: CloudflareEnv, rawHostname: string): 
   }
 }
 
+export async function findMailboxRoute(env: CloudflareEnv, zoneId: string, address: string) {
+  const rules = await cfRequest<Array<{ id?: string; tag?: string; matchers?: Array<{ type: string; field?: string; value?: string }> }>>(env, `/zones/${zoneId}/email/routing/rules?per_page=50`)
+  const target = address.toLowerCase()
+  const rule = rules.find((item) => item.matchers?.some((matcher) => matcher.type === 'literal' && matcher.value?.toLowerCase() === target))
+  const id = rule?.id ?? rule?.tag
+  return id ? { id } : null
+}
+
 export async function createMailboxRoute(env: CloudflareEnv, zoneId: string, address: string) {
-  return cfRequest<{ id: string }>(env, `/zones/${zoneId}/email/routing/rules`, {
-    method: 'POST',
-    body: JSON.stringify({
-      actions: [{ type: 'worker', value: [env.CF_EMAIL_WORKER_NAME ?? 'qibermail'] }],
-      enabled: true,
-      matchers: [{ type: 'literal', field: 'to', value: address }],
-      name: `Route ${address} to QiberMail`,
-    }),
-  })
+  try {
+    return await cfRequest<{ id: string }>(env, `/zones/${zoneId}/email/routing/rules`, {
+      method: 'POST',
+      body: JSON.stringify({
+        actions: [{ type: 'worker', value: [env.CF_EMAIL_WORKER_NAME ?? 'qibermail'] }],
+        enabled: true,
+        matchers: [{ type: 'literal', field: 'to', value: address }],
+        name: `Route ${address} to QiberMail`,
+      }),
+    })
+  } catch (error) {
+    // Cloudflare rejects a second rule for the same address; reuse the existing one instead of failing.
+    if (error instanceof Error && /duplicat/i.test(error.message)) {
+      const existing = await findMailboxRoute(env, zoneId, address)
+      if (existing) return existing
+    }
+    throw error
+  }
 }
 
 export async function deleteMailboxRoute(env: CloudflareEnv, zoneId: string, ruleId: string) {
@@ -134,7 +151,8 @@ export type DomainInspection = {
   missingRecords: DnsRecord[]
   rules: Array<{ id: string; name: string; enabled: boolean; matchers: string[]; actions: string[] }>
   catchAll: { enabled: boolean; actions: string[] } | null
-  sending: { tag: string; enabled: boolean; status: string | null } | null
+  sending: { tag: string; enabled: boolean; status: string | null; dkimSelector: string | null; returnPathDomain: string | null } | null
+  sendingRecords: SendingRecord[]
   checks: DomainDnsCheck[]
   errors: string[]
 }
@@ -159,12 +177,12 @@ export async function inspectDomain(env: CloudflareEnv, zoneId: string, hostname
   const zone = await attempt('zone', () => cfRequest<{ name: string }>(env, `/zones/${zoneId}`))
   const isSubdomain = Boolean(zone && zone.name !== hostname)
 
-  const [routing, dns, rules, catchAll, subdomains, host, dmarc, dkim] = await Promise.all([
+  const [routing, dns, rules, catchAll, sendingSetup, host, dmarc, dkim] = await Promise.all([
     attempt('routing', () => cfRequest<{ enabled?: boolean; status?: string; modified?: string }>(env, `/zones/${zoneId}/email/routing`)),
     attempt('dns', () => cfRequest<DnsRecord[] | { record?: DnsRecord[]; errors?: Array<{ code?: string; missing?: DnsRecord }> }>(env, `/zones/${zoneId}/email/routing/dns${isSubdomain ? `?subdomain=${encodeURIComponent(hostname)}` : ''}`)),
     attempt('rules', () => cfRequest<RoutingRule[]>(env, `/zones/${zoneId}/email/routing/rules?per_page=50`)),
     attempt('catch-all', () => cfRequest<RoutingRule>(env, `/zones/${zoneId}/email/routing/rules/catch_all`)),
-    isSubdomain ? attempt('sending', () => cfRequest<Array<{ tag: string; name: string; enabled: boolean; status?: string }>>(env, `/zones/${zoneId}/email/sending/subdomains`)) : Promise.resolve(null),
+    attempt('sending', () => getSendingSetup(env, zoneId, hostname)),
     attempt('dns records', () => dnsRecords(env, zoneId, hostname)),
     attempt('dmarc record', () => dnsRecords(env, zoneId, `_dmarc.${hostname}`)),
     attempt('dkim record', () => dnsRecords(env, zoneId, `cf2024-1._domainkey.${hostname}`)),
@@ -186,15 +204,80 @@ export async function inspectDomain(env: CloudflareEnv, zoneId: string, hostname
     { kind: 'dmarc', name: `_dmarc.${hostname}`, ok: dmarcRecords.some((value) => /v=DMARC1/i.test(value)), records: dmarcRecords },
   ]
 
-  const sendingSubdomain = subdomains?.find((item) => item.name === hostname)
+  const sendingSubdomain = sendingSetup?.subdomain ?? null
   return {
     routing: routing ? { enabled: routing.enabled ?? false, status: routing.status ?? null, modified: routing.modified ?? null } : null,
     requiredRecords,
     missingRecords,
     rules: domainRules.map((rule) => ({ id: rule.id ?? rule.tag ?? '', name: rule.name ?? '', enabled: rule.enabled ?? false, matchers: (rule.matchers ?? []).map(describeMatcher), actions: (rule.actions ?? []).map(describeAction) })),
     catchAll: catchAll ? { enabled: catchAll.enabled ?? false, actions: (catchAll.actions ?? []).map(describeAction) } : null,
-    sending: sendingSubdomain ? { tag: sendingSubdomain.tag, enabled: sendingSubdomain.enabled, status: sendingSubdomain.status ?? null } : null,
+    sending: sendingSubdomain ? { tag: sendingSubdomain.tag, enabled: sendingSubdomain.enabled, status: sendingSubdomain.status ?? null, dkimSelector: sendingSubdomain.dkim_selector ?? null, returnPathDomain: sendingSubdomain.return_path_domain ?? null } : null,
+    sendingRecords: sendingSetup?.records ?? [],
     checks,
     errors,
   }
+}
+
+export async function deleteMailboxRouteByAddress(env: CloudflareEnv, zoneId: string, address: string) {
+  const rules = await cfRequest<RoutingRule[]>(env, `/zones/${zoneId}/email/routing/rules?per_page=50`)
+  const target = address.toLowerCase()
+  const matches = rules.filter((rule) => rule.matchers?.some((matcher) => matcher.type === 'literal' && matcher.value?.toLowerCase() === target))
+  for (const rule of matches) {
+    const id = rule.id ?? rule.tag
+    if (id) await deleteMailboxRoute(env, zoneId, id)
+  }
+  return matches.length
+}
+
+type SendingSubdomain = { tag: string; name: string; enabled: boolean; dkim_selector?: string; return_path_domain?: string; status?: string }
+export type SendingRecord = { type: string; name: string; content: string; priority?: number; present: boolean }
+export type SendingSetup = { subdomain: SendingSubdomain | null; records: SendingRecord[] }
+
+function normalizeTxt(value: string) {
+  return value.trim().replace(/^"|"$/g, '').replace(/"\s*"/g, '').trim().toLowerCase()
+}
+
+async function requiredSendingRecords(env: CloudflareEnv, zoneId: string, tag: string) {
+  const result = await cfRequest<DnsRecord[] | { record?: DnsRecord[]; records?: DnsRecord[] }>(env, `/zones/${zoneId}/email/sending/subdomains/${tag}/dns`)
+  return Array.isArray(result) ? result : result.record ?? result.records ?? []
+}
+
+async function markPresence(env: CloudflareEnv, zoneId: string, required: DnsRecord[]): Promise<SendingRecord[]> {
+  const names = [...new Set(required.map((record) => record.name.toLowerCase()))]
+  const existing = (await Promise.all(names.map((name) => dnsRecords(env, zoneId, name).catch(() => [] as DnsRecord[])))).flat()
+  return required.map((record) => ({
+    type: record.type,
+    name: record.name,
+    content: record.content,
+    priority: record.priority,
+    present: existing.some((item) => item.type === record.type && item.name.toLowerCase() === record.name.toLowerCase() && (record.type === 'TXT' ? normalizeTxt(item.content) === normalizeTxt(record.content) : item.content.toLowerCase().replace(/\.$/, '') === record.content.toLowerCase().replace(/\.$/, ''))),
+  }))
+}
+
+export async function getSendingSetup(env: CloudflareEnv, zoneId: string, hostname: string): Promise<SendingSetup> {
+  const subdomains = await cfRequest<SendingSubdomain[]>(env, `/zones/${zoneId}/email/sending/subdomains`)
+  const subdomain = subdomains.find((item) => item.name.toLowerCase() === hostname.toLowerCase()) ?? null
+  if (!subdomain) return { subdomain: null, records: [] }
+  const required = await requiredSendingRecords(env, zoneId, subdomain.tag).catch(() => [] as DnsRecord[])
+  return { subdomain, records: await markPresence(env, zoneId, required) }
+}
+
+export async function enableSending(env: CloudflareEnv, zoneId: string, hostname: string): Promise<SendingSetup> {
+  const current = await getSendingSetup(env, zoneId, hostname)
+  let subdomain = current.subdomain
+  if (!subdomain) {
+    subdomain = await cfRequest<SendingSubdomain>(env, `/zones/${zoneId}/email/sending/subdomains`, { method: 'POST', body: JSON.stringify({ name: hostname }) })
+  }
+  if (!subdomain.enabled) {
+    subdomain = await cfRequest<SendingSubdomain>(env, `/zones/${zoneId}/email/sending/subdomains/${subdomain.tag}`, { method: 'PATCH', body: JSON.stringify({ enabled: true }) }).catch(() => subdomain as SendingSubdomain)
+  }
+  const required = await requiredSendingRecords(env, zoneId, subdomain.tag).catch(() => [] as DnsRecord[])
+  const records = await markPresence(env, zoneId, required)
+  for (const record of records.filter((item) => !item.present)) {
+    await cfRequest<unknown>(env, `/zones/${zoneId}/dns_records`, {
+      method: 'POST',
+      body: JSON.stringify({ type: record.type, name: record.name, content: record.content, ttl: 1, ...(record.priority !== undefined ? { priority: record.priority } : {}) }),
+    })
+  }
+  return getSendingSetup(env, zoneId, hostname)
 }

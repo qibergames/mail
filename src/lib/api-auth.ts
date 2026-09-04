@@ -15,3 +15,13 @@ export async function requireAdmin(request: Request) {
   if (!user || user.banned || user.role !== 'admin') throw new Response('Forbidden', { status: 403 })
   return session
 }
+
+export function describeIssues(error: { issues: Array<{ path: PropertyKey[]; message: string }> }) {
+  return error.issues.map((issue) => `${issue.path.map(String).join('.') || 'input'}: ${issue.message}`).join('; ')
+}
+
+export function errorResponse(error: unknown, status = 400) {
+  if (error instanceof Response) return error
+  console.error(error)
+  return Response.json({ error: error instanceof Error ? error.message : 'Request failed' }, { status })
+}
