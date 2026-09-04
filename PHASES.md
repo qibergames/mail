@@ -20,6 +20,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 9. Éles helyreállítás | `done` | D1 migráció, runtime Turnstile és production smoke |
 | 10. Setup diagnosztika | `done` | Siteverify hibakódok és automatikus token-reset |
 | 11. Turnstile lifecycle | `done` | Lejárat-, timeout- és újrapróbálkozás-kezelés |
+| 12. UI finomhangolás | `done` | Shadcn postaláda-select és könnyebb kapcsolók |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -154,6 +155,15 @@ Ellenőrzőkapu: TypeScript, ESLint, 12 Bun-teszt és production build.
 
 Eredmény: a `timeout-or-duplicate` gyökérok kliensoldali kezelése elkészült, minden ellenőrzés zöld.
 
+## 12. fázis – UI finomhangolás `done`
+
+- A böngészőfüggő natív postaláda-dropdown helyett témázott, billentyűzettel kezelhető shadcn/Radix Select készült.
+- A nyelv- és témakapcsolókról lekerült a nehéz dupla kapszulakeret; az aktív állapot és az akadálymentes csoportjelölés megmaradt.
+
+Ellenőrzőkapu: TypeScript, ESLint, 12 Bun-teszt és production build.
+
+Eredmény: a sidebar vezérlői light/dark módban egységes shadcn megjelenést kaptak, minden ellenőrzés zöld.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -173,3 +183,4 @@ Eredmény: a `timeout-or-duplicate` gyökérok kliensoldali kezelése elkészül
 - 2026-09-04: 9. fázis lezárva. A hiányzó production D1 migráció és a Turnstile build/runtime eltérés javítva; az éles setup smoke zöld.
 - 2026-09-04: 10. fázis lezárva. A setup és Turnstile hibák biztonságosan diagnosztizálhatók, a felhasznált token automatikusan megújul.
 - 2026-09-04: 11. fázis lezárva. A Turnstile lejárat/timeout callbackjei és token-reset bekerültek.
+- 2026-09-04: 12. fázis lezárva. A postaláda-választó és a fejléc kapcsolói shadcn stílusra lettek finomítva.

@@ -11,13 +11,14 @@ export function LocaleToggle() {
   }
 
   return (
-    <div className="flex rounded-full border bg-background p-1" aria-label="Language">
+    <div className="flex items-center gap-1" role="group" aria-label="Language">
       {(['hu', 'en'] as const).map((locale) => (
         <Button
           key={locale}
           type="button"
           variant={i18n.locale === locale ? 'secondary' : 'ghost'}
           size="sm"
+          className="rounded-lg px-2.5"
           aria-pressed={i18n.locale === locale}
           onClick={() => changeLocale(locale)}
         >

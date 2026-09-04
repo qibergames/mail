@@ -29,6 +29,7 @@ import { ThemeToggle } from './theme-toggle'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { authClient } from '@/lib/auth-client'
 import { cn } from '@/lib/utils'
 
@@ -180,9 +181,14 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
           </nav>
           {folders.some((folder) => folder.mailboxId === mailboxId) && <nav className="grid gap-1 border-t pt-3" aria-label={i18n._('Custom folders')}>{folders.filter((folder) => folder.mailboxId === mailboxId).map((folder) => <Button key={folder.id} asChild variant={folder.id === folderId ? 'secondary' : 'ghost'} className="justify-start rounded-full"><Link to="/folders/$folderId" params={{ folderId: folder.id }}><span className="size-2 rounded-full" style={{ backgroundColor: folder.color }} />{folder.name}</Link></Button>)}</nav>}
           <div className="mt-auto grid gap-3">
-            <select aria-label={i18n._('Mailbox')} className="h-10 rounded-md border bg-background px-3 text-sm" value={mailboxId} onChange={(event) => setMailboxId(event.target.value)}>
-              {mailboxes.map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name || mailbox.address}</option>)}
-            </select>
+            <Select value={mailboxId} onValueChange={setMailboxId}>
+              <SelectTrigger aria-label={i18n._('Mailbox')} className="h-10 w-full rounded-xl bg-background/60 shadow-none">
+                <SelectValue placeholder={i18n._('Mailbox')} />
+              </SelectTrigger>
+              <SelectContent>
+                {mailboxes.map((mailbox) => <SelectItem key={mailbox.id} value={mailbox.id}>{mailbox.name || mailbox.address}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Button asChild variant="ghost" className="justify-start"><Link to="/settings"><Settings /><Trans id="Settings" /></Link></Button>
             <Button asChild variant="ghost" className="justify-start"><Link to="/tools"><Wrench /><Trans id="Tools" /></Link></Button>
             {session?.user.role === 'admin' && <Button asChild variant="ghost" className="justify-start"><Link to="/admin"><ShieldAlert /><Trans id="Administration" /></Link></Button>}

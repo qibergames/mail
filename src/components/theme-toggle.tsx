@@ -13,13 +13,14 @@ export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
 
   return (
-    <div className="flex rounded-full border bg-background p-1" aria-label="Theme">
+    <div className="flex items-center gap-1" role="group" aria-label="Theme">
       {choices.map(({ value, icon: Icon }) => (
         <Button
           key={value}
           type="button"
           variant={theme === value ? 'secondary' : 'ghost'}
           size="icon-sm"
+          className="rounded-lg"
           aria-label={value}
           aria-pressed={theme === value}
           onClick={() => setTheme(value)}
