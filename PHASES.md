@@ -26,6 +26,7 @@ Minden fázisnál vezetjük az állapotot (`pending`, `active`, `blocked`, `done
 | 15. UI helykihasználás | `done` | Rejtettebb preferenciák és méretezhető levélpanelek |
 | 16. Import visszajelzés | `done` | Kiemelt, animált importfolyamat százalékkal |
 | 17. Levélolvasó javítások | `done` | Görgethető panelek, sticky műveletsáv és betöltődő képek |
+| 18. Olvasottsági jelzés | `done` | Jól elkülönülő olvasott és olvasatlan levélsorok |
 
 ## 0. fázis – Feltérképezés `done`
 
@@ -219,6 +220,15 @@ Ellenőrzőkapu: TypeScript, ESLint, 16 Bun-teszt és production build.
 
 Eredmény: a hosszú levéllista nem vágja le a sidebar alját, az olvasóműveletek görgetés közben elérhetők, és az emailképek betöltődnek.
 
+## 18. fázis – Olvasottsági jelzés `done`
+
+- Az olvasatlan levelek kiemelt hátteret, bal oldali jelölősávot és félkövér feladót, tárgyat és dátumot kapnak.
+- Az olvasott levelek visszafogott szövegszínnel jelennek meg, az állapot képernyőolvasóval is elérhető.
+
+Ellenőrzőkapu: TypeScript, ESLint, 16 Bun-teszt és production build.
+
+Eredmény: az olvasott és olvasatlan levelek egy pillantással megkülönböztethetők.
+
 ## Tudatos egyszerűsítések
 
 - Nincs régi Mailflare-adatmigráció.
@@ -244,3 +254,4 @@ Eredmény: a hosszú levéllista nem vágja le a sidebar alját, az olvasóműve
 - 2026-09-04: 15. fázis lezárva. A preferenciák külön oldalra kerültek, a levélpanelek méretezhetők és a navigáció túlcsordulása megszűnt.
 - 2026-09-04: 16. fázis lezárva. Az import előkészítése és kötegelt haladása kiemelt folyamatjelzőt kapott.
 - 2026-09-04: 17. fázis lezárva. A levélpanelek scrollja, a sticky műveletsáv és az emailképek megjelenítése javítva.
+- 2026-09-04: 18. fázis lezárva. A levéllista egyértelmű és akadálymentes olvasottsági jelzést kapott.
