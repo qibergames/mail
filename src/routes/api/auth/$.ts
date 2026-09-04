@@ -16,8 +16,10 @@ async function handlePost(request: Request) {
         headers: { 'Retry-After': '60' },
       })
     }
-    if (!(await verifyTurnstile(request, request.headers.get('x-turnstile-token'))).success) {
-      return Response.json({ code: 'VERIFICATION_FAILED', message: 'Verification failed' }, { status: 400 })
+    const verification = await verifyTurnstile(request, request.headers.get('x-turnstile-token'))
+    if (!verification.success) {
+      const codes = verification.errorCodes.join(', ')
+      return Response.json({ code: 'VERIFICATION_FAILED', message: codes ? `Verification failed (${codes})` : 'Verification failed' }, { status: 400 })
     }
   }
 

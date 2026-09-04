@@ -306,4 +306,5 @@ export const messages = {
   'Write your message': 'Write your message',
   'Send now': 'Send now',
   'Scheduled for': 'Scheduled for',
+  'Verification failed': 'Verification failed',
 }

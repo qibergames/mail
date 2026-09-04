@@ -306,4 +306,5 @@ export const messages = {
   'Write your message': 'Írd meg az üzenetet',
   'Send now': 'Küldés most',
   'Scheduled for': 'Ütemezve:',
+  'Verification failed': 'Az ellenőrzés nem sikerült',
 }

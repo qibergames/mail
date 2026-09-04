@@ -14,6 +14,7 @@ export const Route = createFileRoute('/login')({ component: LoginPage })
 function LoginPage() {
   const { i18n } = useLingui()
   const [token, setToken] = useState('')
+  const [turnstileAttempt, setTurnstileAttempt] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -27,7 +28,12 @@ function LoginPage() {
       { headers: { 'x-turnstile-token': token } },
     )
     setLoading(false)
-    if (result.error) return setError(result.error.message ?? i18n._('Login failed'))
+    if (result.error) {
+      setError(result.error.message ?? i18n._('Login failed'))
+      setToken('')
+      setTurnstileAttempt((attempt) => attempt + 1)
+      return
+    }
     location.assign('/inbox')
   }
 
@@ -42,7 +48,7 @@ function LoginPage() {
           <form className="grid gap-4" onSubmit={submit}>
             <div className="grid gap-2"><Label htmlFor="email"><Trans id="Email" /></Label><Input id="email" name="email" type="email" autoComplete="email" required /></div>
             <div className="grid gap-2"><Label htmlFor="password"><Trans id="Password" /></Label><Input id="password" name="password" type="password" autoComplete="current-password" required /></div>
-            <Turnstile onToken={setToken} />
+            <Turnstile key={turnstileAttempt} onToken={setToken} />
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
             <Button type="submit" disabled={loading || !token}>{loading ? <Trans id="Signing in…" /> : <Trans id="Sign in" />}</Button>
             <Button asChild type="button" variant="ghost"><Link to="/forgot-password"><Trans id="Forgot password?" /></Link></Button>
