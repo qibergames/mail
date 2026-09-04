@@ -124,7 +124,9 @@ async function runAdminAction(request: Request, session: Awaited<ReturnType<type
   } else {
     const domain = (await db.select({ id: domains.id }).from(domains).where(eq(domains.id, input.domainId)).limit(1)).at(0)
     if (!domain) return Response.json({ error: 'Unknown domain' }, { status: 400 })
-    if (input.mailboxId && !(await db.select({ id: mailboxes.id }).from(mailboxes).where(and(eq(mailboxes.id, input.mailboxId), eq(mailboxes.domainId, input.domainId))).limit(1)).length) return Response.json({ error: 'Invalid mailbox' }, { status: 400 })
+    if (input.actionType === 'store' && !input.mailboxId) return Response.json({ error: 'Choose a mailbox to deliver to' }, { status: 400 })
+    if (input.actionType === 'forward' && !input.forwardTo) return Response.json({ error: 'Choose an address to forward to' }, { status: 400 })
+    if (input.mailboxId && !(await db.select({ id: mailboxes.id }).from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1)).length) return Response.json({ error: 'Invalid mailbox' }, { status: 400 })
     const id = newId('rul')
     await db.insert(routingRules).values({ id, userId: session.user.id, domainId: input.domainId, mailboxId: input.mailboxId, scope: 'domain', name: input.name, pattern: input.pattern, matchField: 'email', matchOperator: 'contains', matchValue: input.pattern, action: input.actionType, forwardTo: input.actionType === 'forward' ? input.forwardTo : null, keepCopy: input.keepCopy })
     result = { id }
