@@ -227,4 +227,11 @@ export const messages = {
   Skipped: 'Kihagyva',
   Username: 'Felhasználónév',
   'Audit log': 'Auditnapló',
+  'Your name, recovery email and password.': 'Neved, helyreállítási e-mail-címed és jelszavad.',
+  'Signature and automatic replies per mailbox.': 'Aláírás és automatikus válaszok postaládánként.',
+  'Organize mail into your own folders.': 'Rendezd leveleidet saját mappákba.',
+  'Automatically sort incoming mail.': 'Bejövő levelek automatikus rendezése.',
+  'Manage contacts and blocked senders.': 'Névjegyek és letiltott feladók kezelése.',
+  'Reusable drafts for common replies.': 'Újrafelhasználható sablonok gyakori válaszokhoz.',
+  'Events with email invitations.': 'Események e-mailes meghívókkal.',
 }

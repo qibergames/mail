@@ -227,4 +227,11 @@ export const messages = {
   Skipped: 'Skipped',
   Username: 'Username',
   'Audit log': 'Audit log',
+  'Your name, recovery email and password.': 'Your name, recovery email and password.',
+  'Signature and automatic replies per mailbox.': 'Signature and automatic replies per mailbox.',
+  'Organize mail into your own folders.': 'Organize mail into your own folders.',
+  'Automatically sort incoming mail.': 'Automatically sort incoming mail.',
+  'Manage contacts and blocked senders.': 'Manage contacts and blocked senders.',
+  'Reusable drafts for common replies.': 'Reusable drafts for common replies.',
+  'Events with email invitations.': 'Events with email invitations.',
 }

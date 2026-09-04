@@ -1,9 +1,9 @@
 import { Trans, useLingui } from '@lingui/react'
 import { AlertCircle, CheckCircle2, Clock3, DatabaseBackup, Download, LoaderCircle, Play, RefreshCw, Save, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { CheckboxField, EmptyState, Field, Loading, SectionHeader, SelectField, StatusBanner } from './section-ui'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Input } from './ui/input'
 import { cn } from '@/lib/utils'
 
 type Backup = { id: string; status: 'queued' | 'running' | 'completed' | 'failed'; trigger: 'manual' | 'scheduled'; filename: string | null; size: number | null; error: string | null; createdAt: string }
@@ -62,28 +62,25 @@ export function BackupApp() {
     await load()
   }
 
-  if (!data && !error) return <div className="grid min-h-64 place-items-center"><LoaderCircle className="animate-spin" /></div>
+  if (!data && !error) return <Loading />
 
-  return <div className="space-y-5">
-    <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><DatabaseBackup /></span>
-      <div><h2 className="text-2xl font-semibold"><Trans id="Backup and restore" /></h2><p className="text-sm text-muted-foreground"><Trans id="D1 backups are encrypted in transit and stored in the configured private R2 bucket." /></p></div>
-      <div className="flex gap-2 sm:ml-auto">
+  return <div className="space-y-4 md:space-y-5">
+    <SectionHeader icon={DatabaseBackup} title="Backup and restore" description="D1 backups are encrypted in transit and stored in the configured private R2 bucket.">
+      <div className="flex shrink-0 flex-wrap gap-2">
         <input ref={restoreInput} className="sr-only" type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file && confirm(i18n._('Restore this backup? Current data will be replaced.'))) void restore(file) }} />
         <Button variant="outline" disabled={Boolean(busy)} onClick={() => restoreInput.current?.click()}>{busy === 'restore' ? <LoaderCircle className="animate-spin" /> : <Upload />}<Trans id="Restore backup" /></Button>
         <Button disabled={Boolean(busy)} onClick={createBackup}>{busy === 'create' ? <LoaderCircle className="animate-spin" /> : <Play />}<Trans id="Create backup" /></Button>
       </div>
-    </div>
+    </SectionHeader>
 
-    {error && <p role="alert" className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600"><AlertCircle className="size-4 shrink-0" />{error}</p>}
-    {status && <p role="status" className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-600"><CheckCircle2 className="size-4 shrink-0" />{status}</p>}
+    <StatusBanner status={error ? { tone: 'error', text: error } : status ? { tone: 'success', text: status } : null} />
 
-    {data && <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
+    {data && <div className="grid gap-4 md:gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
       <Card className="overflow-hidden rounded-2xl">
-        <CardHeader className="flex-row items-center border-b"><div><CardTitle className="text-xl"><Trans id="Backup history" /></CardTitle><CardDescription><Trans id="Completed backups can be downloaded as JSON." /></CardDescription></div><Button className="ml-auto" size="icon" variant="ghost" onClick={load} aria-label={i18n._('Refresh')}><RefreshCw /></Button></CardHeader>
+        <CardHeader className="flex-row items-center border-b pb-4"><div><CardTitle className="text-xl"><Trans id="Backup history" /></CardTitle><CardDescription><Trans id="Completed backups can be downloaded as JSON." /></CardDescription></div><Button className="ml-auto" size="icon" variant="ghost" onClick={load} aria-label={i18n._('Refresh')}><RefreshCw /></Button></CardHeader>
         <CardContent className="grid gap-3 p-4">
-          {data.backups.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground"><Trans id="No backups yet." /></p>}
-          {data.backups.map((backup) => <article key={backup.id} className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center">
+          {data.backups.length === 0 && <EmptyState icon={DatabaseBackup}><Trans id="No backups yet." /></EmptyState>}
+          {data.backups.map((backup) => <article key={backup.id} className="flex flex-col gap-3 rounded-xl border bg-background p-4 shadow-xs sm:flex-row sm:items-center">
             <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', backup.status === 'completed' ? 'bg-emerald-500/10 text-emerald-600' : backup.status === 'failed' ? 'bg-red-500/10 text-red-600' : 'bg-primary/10 text-primary')}>{backup.status === 'completed' ? <CheckCircle2 /> : backup.status === 'failed' ? <AlertCircle /> : <Clock3 className={backup.status === 'running' ? 'animate-pulse' : ''} />}</span>
             <div className="min-w-0 flex-1"><h3 className="truncate font-medium">{backup.filename ?? backup.id}</h3><p className="text-xs text-muted-foreground">{backup.trigger} · {new Date(backup.createdAt).toLocaleString(i18n.locale)}{backup.size !== null && ` · ${(backup.size / 1024).toFixed(1)} KB`}</p>{backup.error && <p className="mt-1 break-words text-xs text-red-600">{backup.error}</p>}</div>
             <span className={cn('w-fit rounded-full border px-2.5 py-1 text-xs font-medium', backup.status === 'completed' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600', backup.status === 'failed' && 'border-red-500/30 bg-red-500/10 text-red-600', (backup.status === 'queued' || backup.status === 'running') && 'border-primary/30 bg-primary/10 text-primary')}>{i18n._(backup.status)}</span>
@@ -92,14 +89,19 @@ export function BackupApp() {
         </CardContent>
       </Card>
 
-      <Card className="h-fit rounded-2xl"><CardHeader><CardTitle className="text-xl"><Trans id="Backup settings" /></CardTitle><CardDescription><Trans id="Automatic backups run at 02:00 UTC." /></CardDescription></CardHeader><CardContent><form className="grid gap-4" onSubmit={saveSettings}>
-        <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" name="enabled" defaultChecked={data.settings?.enabled} /><Trans id="Scheduled backups" /></label>
-        <label className="grid gap-2 text-sm font-medium"><Trans id="Schedule" /><select name="scheduleType" defaultValue={data.settings?.scheduleType ?? 'daily'} className="h-10 rounded-md border bg-background px-3"><option value="daily">daily</option><option value="weekly">weekly</option><option value="monthly">monthly</option></select></label>
-        <label className="grid gap-2 text-sm font-medium"><Trans id="Day value" /><Input name="scheduleValue" type="number" min={0} max={31} defaultValue={data.settings?.scheduleValue ?? ''} /></label>
-        <div className="border-t pt-4"><label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" name="retentionEnabled" defaultChecked={data.settings?.retentionEnabled} /><Trans id="Delete expired backups" /></label></div>
-        <label className="grid gap-2 text-sm font-medium"><Trans id="Retention days" /><Input name="retentionDays" type="number" min={1} max={3650} defaultValue={data.settings?.retentionDays ?? 30} /></label>
-        <Button disabled={Boolean(busy)}>{busy === 'settings' ? <LoaderCircle className="animate-spin" /> : <Save />}<Trans id="Save" /></Button>
-      </form></CardContent></Card>
+      <Card className="h-fit rounded-2xl">
+        <CardHeader><CardTitle className="text-xl"><Trans id="Backup settings" /></CardTitle><CardDescription><Trans id="Automatic backups run at 02:00 UTC." /></CardDescription></CardHeader>
+        <CardContent>
+          <form className="grid gap-4" onSubmit={saveSettings}>
+            <CheckboxField label="Scheduled backups" name="enabled" defaultChecked={data.settings?.enabled} />
+            <SelectField label="Schedule" name="scheduleType" defaultValue={data.settings?.scheduleType ?? 'daily'} options={['daily', 'weekly', 'monthly']} />
+            <Field label="Day value" name="scheduleValue" type="number" min={0} max={31} defaultValue={data.settings?.scheduleValue ?? ''} />
+            <div className="border-t pt-4"><CheckboxField label="Delete expired backups" name="retentionEnabled" defaultChecked={data.settings?.retentionEnabled} /></div>
+            <Field label="Retention days" name="retentionDays" type="number" min={1} max={3650} defaultValue={data.settings?.retentionDays ?? 30} />
+            <Button disabled={Boolean(busy)}>{busy === 'settings' ? <LoaderCircle className="animate-spin" /> : <Save />}<Trans id="Save" /></Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>}
   </div>
 }
