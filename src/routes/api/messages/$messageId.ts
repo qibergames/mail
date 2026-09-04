@@ -1,9 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { eq } from 'drizzle-orm'
+import { env } from 'cloudflare:workers'
+import PostalMime from 'postal-mime'
 import { getDb } from '@/db'
 import { messageAttachments, messages } from '@/db/schema'
 import { requireSession } from '@/lib/api-auth'
 import { accessibleMailboxIds } from '@/lib/email/outbound'
+import { extractSecurityDetails } from '@/lib/email/security'
 
 export const Route = createFileRoute('/api/messages/$messageId')({
   server: {
@@ -22,7 +25,13 @@ export const Route = createFileRoute('/api/messages/$messageId')({
           disposition: messageAttachments.disposition,
           contentId: messageAttachments.contentId,
         }).from(messageAttachments).where(eq(messageAttachments.messageId, message.id))
-        return Response.json({ message, attachments })
+        const raw = message.rawR2Key ? await env.BUCKET.get(message.rawR2Key) : null
+        const security = raw
+          ? await raw.arrayBuffer()
+              .then(async (buffer) => extractSecurityDetails((await PostalMime.parse(buffer)).headers))
+              .catch(() => null)
+          : null
+        return Response.json({ message, attachments, security })
       },
       PATCH: async ({ request, params }) => {
         const session = await requireSession(request)

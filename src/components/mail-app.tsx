@@ -4,11 +4,13 @@ import {
   Archive,
   ArrowLeft,
   CalendarClock,
+  ChevronDown,
   CornerUpLeft,
   FileText,
   Forward,
   Inbox,
   LoaderCircle,
+  LockKeyhole,
   LogOut,
   Mail,
   Menu,
@@ -20,6 +22,7 @@ import {
   ShieldAlert,
   Star,
   Trash2,
+  TriangleAlert,
   Wrench,
   X,
 } from 'lucide-react'
@@ -30,6 +33,7 @@ import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { authClient } from '@/lib/auth-client'
 import { resolveInlineImages } from '@/lib/email/html'
+import type { SecurityDetails } from '@/lib/email/security'
 import { clampMessageListWidth } from '@/lib/mail-layout'
 import { cn } from '@/lib/utils'
 
@@ -51,7 +55,28 @@ type Message = {
   createdAt: string
 }
 type Attachment = { id: string; filename: string; contentType: string; size: number; contentId: string | null }
+type MessageDetail = { message: Message; attachments: Array<Attachment>; security: SecurityDetails | null }
 type Draft = { id?: string; to?: string; subject?: string; text?: string }
+
+function senderParts(value: string) {
+  const address = value.match(/<([^>]+)>/)?.[1]
+  if (!address) return { name: value, address: value }
+  const name = value.slice(0, value.indexOf('<')).trim().replace(/^"([\s\S]*)"$/, '$1').replaceAll('\\"', '"').replaceAll('\\\\', '\\')
+  return { name: name || address, address }
+}
+
+function relativeTime(date: Date, locale: string) {
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+  const minutes = Math.round((date.getTime() - Date.now()) / 60_000)
+  if (Math.abs(minutes) < 60) return formatter.format(minutes, 'minute')
+  const hours = Math.round(minutes / 60)
+  if (Math.abs(hours) < 24) return formatter.format(hours, 'hour')
+  const days = Math.round(hours / 24)
+  if (Math.abs(days) < 30) return formatter.format(days, 'day')
+  const months = Math.round(days / 30)
+  if (Math.abs(months) < 12) return formatter.format(months, 'month')
+  return formatter.format(Math.round(months / 12), 'year')
+}
 
 const navigation = [
   { view: 'inbox', href: '/inbox', icon: Inbox, label: 'Inbox' },
@@ -73,6 +98,8 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   const [messages, setMessages] = useState<Array<Message>>([])
   const [selected, setSelected] = useState<Message | null>(null)
   const [selectedAttachments, setSelectedAttachments] = useState<Array<Attachment>>([])
+  const [selectedSecurity, setSelectedSecurity] = useState<SecurityDetails | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Array<string>>([])
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
@@ -105,9 +132,11 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
     if (!messageId) return
     void fetch(`/api/messages/${encodeURIComponent(messageId)}`).then(async (response) => {
       if (!response.ok) return
-      const detail = await response.json<{ message: Message; attachments: Array<Attachment> }>()
+      const detail = await response.json<MessageDetail>()
       setSelected(detail.message)
       setSelectedAttachments(detail.attachments)
+      setSelectedSecurity(detail.security)
+      setDetailsOpen(false)
       if (!detail.message.read) await updateMessage(detail.message.id, { read: true })
     })
   }, [])
@@ -151,9 +180,11 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   async function selectMessage(message: Message) {
     const response = await fetch(`/api/messages/${message.id}`)
     if (!response.ok) return
-    const detail = await response.json<{ message: Message; attachments: Array<Attachment> }>()
+    const detail = await response.json<MessageDetail>()
     setSelected(detail.message)
     setSelectedAttachments(detail.attachments)
+    setSelectedSecurity(detail.security)
+    setDetailsOpen(false)
     if (!detail.message.read) {
       await updateMessage(detail.message.id, { read: true })
     }
@@ -279,7 +310,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                   </div>
                 <article className="mx-auto w-full max-w-6xl p-4 md:p-8">
                   <h2 className="text-2xl font-semibold">{selected.subject || i18n._('(No subject)')}</h2>
-                  <div className="mt-6 text-sm"><strong>{selected.fromAddr}</strong><div className="text-muted-foreground"><Trans id="To" />: {selected.toAddr}</div></div>
+                  <MessageHeader message={selected} security={selectedSecurity} open={detailsOpen} onToggle={() => setDetailsOpen((value) => !value)} ownAddresses={mailboxes.map((mailbox) => mailbox.address)} />
                   {selected.htmlBody ? <iframe title={i18n._('Message content')} sandbox="allow-same-origin" referrerPolicy="no-referrer" className="mt-8 min-h-96 w-full border-0 bg-white" onLoad={(event) => { event.currentTarget.style.height = `${event.currentTarget.contentDocument?.documentElement.scrollHeight ?? 384}px` }} srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:">${resolveInlineImages(selected.htmlBody, selected.id, selectedAttachments)}`} /> : <pre className="mt-8 whitespace-pre-wrap break-words font-sans text-sm leading-7">{selected.textBody || i18n._('This message has no plain-text body.')}</pre>}
                   {selectedAttachments.length > 0 && <div className="mt-8 flex flex-wrap gap-2">{selectedAttachments.map((attachment) => <a key={attachment.id} className="rounded-md border px-3 py-2 text-sm hover:bg-muted" href={`/api/messages/${selected.id}/attachments/${attachment.id}`}>{attachment.filename} · {(attachment.size / 1024).toFixed(0)} KB</a>)}</div>}
                 </article>
@@ -292,6 +323,68 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
       {mobileMenu && <button type="button" aria-label={i18n._('Close menu')} className="absolute inset-0 z-20 bg-black/30 md:hidden" onClick={() => setMobileMenu(false)} />}
       {composer && <Composer mailboxId={mailboxId} draft={composer} close={() => setComposer(null)} sent={() => { setComposer(null); setRefresh((value) => value + 1) }} />}
     </main>
+  )
+}
+
+function MessageHeader({ message, security, open, onToggle, ownAddresses }: { message: Message; security: SecurityDetails | null; open: boolean; onToggle: () => void; ownAddresses: Array<string> }) {
+  const { i18n } = useLingui()
+  const from = senderParts(message.fromAddr)
+  const to = senderParts(message.toAddr)
+  const parsedDate = security?.date ? Date.parse(security.date) : Number.NaN
+  const date = Number.isNaN(parsedDate) ? new Date(message.createdAt) : new Date(parsedDate)
+  const dateLabel = date.toLocaleString(i18n.locale, { dateStyle: 'long', timeStyle: 'short' })
+  const authFailed = security !== null && [security.spf, security.dkim, security.dmarc].includes('fail')
+  const label = (id: string) => <dt className="text-right lowercase text-muted-foreground"><Trans id={id} />:</dt>
+  return (
+    <div className="mt-6">
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/15 text-base font-semibold text-primary">{from.name.charAt(0).toUpperCase() || '?'}</span>
+        <div className="relative min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <strong className="truncate text-sm">{from.name}</strong>
+            {from.address !== from.name && <span className="truncate text-xs text-muted-foreground">&lt;{from.address}&gt;</span>}
+            <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground">{dateLabel} ({relativeTime(date, i18n.locale)})</span>
+          </div>
+          <button type="button" onClick={onToggle} aria-expanded={open} className="mt-0.5 flex items-center gap-0.5 rounded text-xs text-muted-foreground hover:text-foreground" aria-label={i18n._('Message details')}>
+            <span className="lowercase"><Trans id="To" /></span>: {ownAddresses.includes(to.address) ? i18n._('me') : to.address}
+            <ChevronDown className="size-3.5" />
+          </button>
+          {open && <button type="button" tabIndex={-1} aria-label={i18n._('Close')} className="fixed inset-0 z-10 cursor-default" onClick={onToggle} />}
+          {open && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-full max-w-md rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl">
+              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
+                {label('From')}
+                <dd className="min-w-0 break-words"><strong>{from.name}</strong>{from.address !== from.name && <span className="text-muted-foreground"> &lt;{from.address}&gt;</span>}</dd>
+                {label('To')}
+                <dd className="min-w-0 break-words">{to.address}</dd>
+                {label('Date')}
+                <dd>{dateLabel}</dd>
+                {label('Subject')}
+                <dd className="min-w-0 break-words">{message.subject || i18n._('(No subject)')}</dd>
+                {security?.mailedBy && <>{label('Mailed by')}<dd className="min-w-0 break-words">{security.mailedBy}</dd></>}
+                {security?.signedBy && <>{label('Signed by')}<dd className="min-w-0 break-words">{security.signedBy}</dd></>}
+                {security && (
+                  <>
+                    {label('Security')}
+                    <dd className="flex items-center gap-1.5">
+                      {security.encryption === 'tls'
+                        ? <><LockKeyhole className="size-3.5 shrink-0 text-muted-foreground" /><Trans id="Standard encryption (TLS)" /></>
+                        : <><TriangleAlert className="size-3.5 shrink-0 text-amber-500" /><Trans id="No encryption" /></>}
+                    </dd>
+                  </>
+                )}
+              </dl>
+            </div>
+          )}
+        </div>
+      </div>
+      {authFailed && (
+        <p className="mt-4 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+          <TriangleAlert className="size-4 shrink-0" />
+          <Trans id="This message failed sender verification. Be careful with links and attachments." />
+        </p>
+      )}
+    </div>
   )
 }
 
