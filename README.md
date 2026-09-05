@@ -33,10 +33,8 @@ The implementation progress and verification ledger is in [PHASES.md](PHASES.md)
 cp .dev.vars.example .dev.vars
 bun install --frozen-lockfile
 bun run db:migrate:local
-CHOKIDAR_USEPOLLING=1 bun run dev
+bun run dev
 ```
-
-Polling is only needed on hosts whose inotify watcher limit is exhausted.
 
 Generate the application secrets before setup:
 
