@@ -36,12 +36,12 @@ export function DomainDetails({ domainId }: { domainId: string }) {
   }, [domainId])
   useEffect(() => { void load() }, [load])
 
-  async function sync(action: 'sync' | 'sending:enable' = 'sync') {
+  async function sync(action: 'sync' | 'sending:enable' | 'routing:repair' = 'sync') {
     setBusy(true)
     setStatus(null)
     const response = await fetch(`/api/admin/domains/${domainId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) })
     const result = await response.json<DomainDetailsData & { error?: string }>().catch(() => null)
-    if (response.ok && result) { setData(result); setStatus({ tone: 'success', text: i18n._(action === 'sync' ? 'Synced from Cloudflare' : 'Email sending configured') }) }
+    if (response.ok && result) { setData(result); setStatus({ tone: 'success', text: i18n._(action === 'sync' ? 'Synced from Cloudflare' : action === 'routing:repair' ? 'Routing rules repaired' : 'Email sending configured') }) }
     else setStatus({ tone: 'error', text: result?.error || i18n._('Sync failed') })
     setBusy(false)
   }
@@ -63,6 +63,7 @@ export function DomainDetails({ domainId }: { domainId: string }) {
   const { domain, cloudflare, stats } = data
   const format = (value: string | null | undefined) => value ? new Date(value).toLocaleString(i18n.locale) : '—'
   const healthy = cloudflare ? cloudflare.checks.filter((check) => check.ok).length : 0
+  const misrouted = cloudflare?.rules.filter((rule) => !rule.ok) ?? []
   const sendingMissing = cloudflare?.sendingRecords.filter((record) => !record.present) ?? []
   const sendingReady = Boolean(cloudflare?.sending?.enabled) && sendingMissing.length === 0 && (cloudflare?.sendingRecords.length ?? 0) > 0
 
@@ -106,6 +107,13 @@ export function DomainDetails({ domainId }: { domainId: string }) {
             <Term label="Zone" /><dd className="font-mono text-xs break-all">{domain.zoneId}</dd>
           </dl>
           : <Unavailable />}
+        {misrouted.length > 0 && <div className="mt-4 flex flex-col gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-2 font-medium text-red-700 dark:text-red-400"><TriangleAlert className="size-4 shrink-0" /><Trans id="Some addresses are routed to another worker, so their mail never reaches QiberMail." /></p>
+            {misrouted.map((rule) => <p key={rule.id} className="mt-1 pl-6 font-mono text-xs break-all text-muted-foreground">{rule.matchers.join(', ')} → {rule.actions.join(', ') || '—'}</p>)}
+          </div>
+          <Button className="shrink-0" disabled={busy} onClick={() => void sync('routing:repair')}>{busy ? <LoaderCircle className="animate-spin" /> : <Wrench />}<Trans id="Repair routing" /></Button>
+        </div>}
         {cloudflare?.missingRecords.length ? <div className="mt-4 space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
           <p className="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-400"><TriangleAlert className="size-4" /><Trans id="Missing DNS records" /></p>
           {cloudflare.missingRecords.map((record, index) => <p key={index} className="font-mono text-xs break-all">{record.type} {record.name} → {record.priority !== undefined ? `${record.priority} ` : ''}{record.content}</p>)}

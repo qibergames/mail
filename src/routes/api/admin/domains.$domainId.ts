@@ -4,7 +4,7 @@ import { env } from 'cloudflare:workers'
 import { getDb } from '@/db'
 import { auditLogs, domains, mailboxAliases, mailboxes, messages, outboundJobs, routingRules, users } from '@/db/schema'
 import { errorResponse, requireAdmin } from '@/lib/api-auth'
-import { enableSending, inspectDomain } from '@/lib/cloudflare-api'
+import { enableSending, inspectDomain, repairMailboxRoutes } from '@/lib/cloudflare-api'
 import { newId } from '@/lib/ids'
 
 async function loadDomain(domainId: string) {
@@ -74,9 +74,15 @@ async function syncDomain(request: Request, domainId: string) {
   const domain = (await db.select().from(domains).where(eq(domains.id, domainId)).limit(1)).at(0)
   if (!domain) return Response.json({ error: 'Unknown domain' }, { status: 404 })
   const body = await request.json<{ action?: string }>().catch((): { action?: string } => ({}))
-  const action = body.action === 'sending:enable' ? 'sending:enable' : 'sync'
+  const action = body.action === 'sending:enable' ? 'sending:enable' : body.action === 'routing:repair' ? 'routing:repair' : 'sync'
   if (action === 'sending:enable') {
     try { await enableSending(env, domain.zoneId, domain.hostname) } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Cloudflare API request failed' }, { status: 502 }) }
+  }
+  if (action === 'routing:repair') {
+    const boxes = await db.select({ localPart: mailboxes.localPart }).from(mailboxes).where(eq(mailboxes.domainId, domain.id))
+    const aliases = await db.select({ localPart: mailboxAliases.localPart }).from(mailboxAliases).where(eq(mailboxAliases.domainId, domain.id))
+    const addresses = [...boxes, ...aliases].map((row) => `${row.localPart}@${domain.hostname}`)
+    try { await repairMailboxRoutes(env, domain.zoneId, addresses) } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Cloudflare API request failed' }, { status: 502 }) }
   }
   const inspection = await inspectDomain(env, domain.zoneId, domain.hostname)
   if (!inspection.routing) return Response.json({ error: inspection.errors.join('; ') || 'Cloudflare API request failed' }, { status: 502 })

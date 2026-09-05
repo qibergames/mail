@@ -396,4 +396,11 @@ export const messages = {
   'This message is not available offline yet.': 'This message is not available offline yet.',
   Offline: 'Offline',
   'Offline: showing cached mail': 'Offline: showing cached mail',
+  'Routing rules repaired': 'Routing rules repaired',
+  'Some addresses are routed to another worker, so their mail never reaches QiberMail.': 'Some addresses are routed to another worker, so their mail never reaches QiberMail.',
+  'Repair routing': 'Repair routing',
+  'Notifications are blocked for this site. Allow them in the browser\'s site settings and try again.': 'Notifications are blocked for this site. Allow them in the browser\'s site settings and try again.',
+  'Push notifications are not configured on the server.': 'Push notifications are not configured on the server.',
+  'Push subscription failed': 'Push subscription failed',
+  'Not supported in this browser': 'Not supported in this browser',
 }

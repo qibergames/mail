@@ -103,33 +103,76 @@ export async function provisionDomain(env: CloudflareEnv, rawHostname: string): 
   }
 }
 
+type DnsRecord = { type: string; name: string; content: string; priority?: number; ttl?: number }
+type RoutingRule = { id?: string; tag?: string; name?: string; enabled?: boolean; matchers?: Array<{ type: string; field?: string; value?: string }>; actions?: Array<{ type: string; value?: string[] }> }
+
+function workerName(env: CloudflareEnv) {
+  return env.CF_EMAIL_WORKER_NAME ?? 'qibermail'
+}
+
+function routesToWorker(env: CloudflareEnv, rule: RoutingRule) {
+  return (rule.actions ?? []).some((action) => action.type === 'worker' && action.value?.includes(workerName(env)))
+}
+
 export async function findMailboxRoute(env: CloudflareEnv, zoneId: string, address: string) {
-  const rules = await cfRequest<Array<{ id?: string; tag?: string; matchers?: Array<{ type: string; field?: string; value?: string }> }>>(env, `/zones/${zoneId}/email/routing/rules?per_page=50`)
+  const rules = await cfRequest<RoutingRule[]>(env, `/zones/${zoneId}/email/routing/rules?per_page=50`)
   const target = address.toLowerCase()
   const rule = rules.find((item) => item.matchers?.some((matcher) => matcher.type === 'literal' && matcher.value?.toLowerCase() === target))
   const id = rule?.id ?? rule?.tag
-  return id ? { id } : null
+  return id && rule ? { id, rule, ok: routesToWorker(env, rule) && rule.enabled !== false } : null
 }
 
+/** Rewrites an existing rule so the address is delivered to this worker (e.g. it still pointed at an older worker). */
+async function retargetMailboxRoute(env: CloudflareEnv, zoneId: string, address: string, existing: { id: string; rule: RoutingRule }) {
+  await cfRequest<unknown>(env, `/zones/${zoneId}/email/routing/rules/${existing.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      actions: [{ type: 'worker', value: [workerName(env)] }],
+      enabled: true,
+      matchers: existing.rule.matchers ?? [{ type: 'literal', field: 'to', value: address }],
+      name: `Route ${address} to QiberMail`,
+    }),
+  })
+  return { id: existing.id }
+}
+
+/** Creates the routing rule for an address, or fixes the existing one so it reaches this worker. */
 export async function createMailboxRoute(env: CloudflareEnv, zoneId: string, address: string) {
   try {
     return await cfRequest<{ id: string }>(env, `/zones/${zoneId}/email/routing/rules`, {
       method: 'POST',
       body: JSON.stringify({
-        actions: [{ type: 'worker', value: [env.CF_EMAIL_WORKER_NAME ?? 'qibermail'] }],
+        actions: [{ type: 'worker', value: [workerName(env)] }],
         enabled: true,
         matchers: [{ type: 'literal', field: 'to', value: address }],
         name: `Route ${address} to QiberMail`,
       }),
     })
   } catch (error) {
-    // Cloudflare rejects a second rule for the same address; reuse the existing one instead of failing.
+    // Cloudflare rejects a second rule for the same address. A specific rule beats the catch-all, so a
+    // leftover rule pointing elsewhere silently steals the mail; make sure it targets this worker.
     if (error instanceof Error && /duplicat/i.test(error.message)) {
       const existing = await findMailboxRoute(env, zoneId, address)
-      if (existing) return existing
+      if (existing) return existing.ok ? { id: existing.id } : retargetMailboxRoute(env, zoneId, address, existing)
     }
     throw error
   }
+}
+
+/** Makes sure every given address on the zone is routed to this worker; returns the addresses that were fixed. */
+export async function repairMailboxRoutes(env: CloudflareEnv, zoneId: string, addresses: string[]) {
+  const rules = await cfRequest<RoutingRule[]>(env, `/zones/${zoneId}/email/routing/rules?per_page=50`)
+  const fixed: string[] = []
+  for (const address of addresses) {
+    const target = address.toLowerCase()
+    const rule = rules.find((item) => item.matchers?.some((matcher) => matcher.type === 'literal' && matcher.value?.toLowerCase() === target))
+    const id = rule?.id ?? rule?.tag
+    if (rule && id && routesToWorker(env, rule) && rule.enabled !== false) continue
+    if (rule && id) await retargetMailboxRoute(env, zoneId, address, { id, rule })
+    else await createMailboxRoute(env, zoneId, address)
+    fixed.push(address)
+  }
+  return fixed
 }
 
 export async function deleteMailboxRoute(env: CloudflareEnv, zoneId: string, ruleId: string) {
@@ -140,8 +183,6 @@ export async function deleteSendingSubdomain(env: CloudflareEnv, zoneId: string,
   return cfRequest<unknown>(env, `/zones/${zoneId}/email/sending/subdomains/${tag}`, { method: 'DELETE' })
 }
 
-type DnsRecord = { type: string; name: string; content: string; priority?: number; ttl?: number }
-type RoutingRule = { id?: string; tag?: string; name?: string; enabled?: boolean; matchers?: Array<{ type: string; field?: string; value?: string }>; actions?: Array<{ type: string; value?: string[] }> }
 
 export type DomainDnsCheck = { kind: 'mx' | 'spf' | 'dkim' | 'dmarc'; name: string; ok: boolean; records: string[] }
 
@@ -149,7 +190,7 @@ export type DomainInspection = {
   routing: { enabled: boolean; status: string | null; modified: string | null } | null
   requiredRecords: DnsRecord[]
   missingRecords: DnsRecord[]
-  rules: Array<{ id: string; name: string; enabled: boolean; matchers: string[]; actions: string[] }>
+  rules: Array<{ id: string; name: string; enabled: boolean; matchers: string[]; actions: string[]; ok: boolean }>
   catchAll: { enabled: boolean; actions: string[] } | null
   sending: { tag: string; enabled: boolean; status: string | null; dkimSelector: string | null; returnPathDomain: string | null } | null
   sendingRecords: SendingRecord[]
@@ -209,7 +250,7 @@ export async function inspectDomain(env: CloudflareEnv, zoneId: string, hostname
     routing: routing ? { enabled: routing.enabled ?? false, status: routing.status ?? null, modified: routing.modified ?? null } : null,
     requiredRecords,
     missingRecords,
-    rules: domainRules.map((rule) => ({ id: rule.id ?? rule.tag ?? '', name: rule.name ?? '', enabled: rule.enabled ?? false, matchers: (rule.matchers ?? []).map(describeMatcher), actions: (rule.actions ?? []).map(describeAction) })),
+    rules: domainRules.map((rule) => ({ id: rule.id ?? rule.tag ?? '', name: rule.name ?? '', enabled: rule.enabled ?? false, matchers: (rule.matchers ?? []).map(describeMatcher), actions: (rule.actions ?? []).map(describeAction), ok: routesToWorker(env, rule) && rule.enabled !== false })),
     catchAll: catchAll ? { enabled: catchAll.enabled ?? false, actions: (catchAll.actions ?? []).map(describeAction) } : null,
     sending: sendingSubdomain ? { tag: sendingSubdomain.tag, enabled: sendingSubdomain.enabled, status: sendingSubdomain.status ?? null, dkimSelector: sendingSubdomain.dkim_selector ?? null, returnPathDomain: sendingSubdomain.return_path_domain ?? null } : null,
     sendingRecords: sendingSetup?.records ?? [],

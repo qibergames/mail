@@ -396,4 +396,11 @@ export const messages = {
   'This message is not available offline yet.': 'Ez a levél offline még nem érhető el.',
   Offline: 'Offline',
   'Offline: showing cached mail': 'Offline: a gyorsítótárazott levelek látszanak',
+  'Routing rules repaired': 'Routing szabályok javítva',
+  'Some addresses are routed to another worker, so their mail never reaches QiberMail.': 'Néhány cím másik workerre van irányítva, ezért a leveleik nem érik el a QiberMailt.',
+  'Repair routing': 'Routing javítása',
+  'Notifications are blocked for this site. Allow them in the browser\'s site settings and try again.': 'Az értesítések le vannak tiltva ehhez az oldalhoz. Engedélyezd a böngésző oldalbeállításaiban, majd próbáld újra.',
+  'Push notifications are not configured on the server.': 'A push értesítések nincsenek beállítva a szerveren.',
+  'Push subscription failed': 'A push feliratkozás nem sikerült',
+  'Not supported in this browser': 'Ez a böngésző nem támogatja',
 }
