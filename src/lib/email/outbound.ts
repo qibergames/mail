@@ -6,7 +6,7 @@ import { storeAttachments } from './attachments'
 import { formatAddress, parseAddress } from './address'
 import { newId } from '@/lib/ids'
 import { enqueueWebhookEvent } from '@/lib/webhooks'
-import { removeMessages } from './sync'
+import { notifyRealtime, removeMessages } from './sync'
 
 export type OutboundQueueMessage = {
   type: 'outbound-mail'
@@ -17,6 +17,7 @@ export type OutboundQueueMessage = {
   subject: string
   text: string
   html?: string
+  headers?: Record<string, string>
 }
 
 export async function accessibleMailboxIds(userId: string) {
@@ -31,7 +32,7 @@ export async function accessibleMailboxIds(userId: string) {
 export async function queueOutboundEmail(
   env: CloudflareEnv,
   userId: string,
-  input: { mailboxId: string; to: string; subject: string; text: string; html?: string; attachments?: Array<Attachment>; scheduledAt?: Date; draftId?: string },
+  input: { mailboxId: string; to: string; subject: string; text: string; html?: string; attachments?: Array<Attachment>; scheduledAt?: Date; draftId?: string; inReplyTo?: string },
 ) {
   if (!parseAddress(input.to)) throw new Error('Invalid recipient address')
   if (input.subject.length > 998) throw new Error('Subject is too long')
@@ -64,6 +65,13 @@ export async function queueOutboundEmail(
   const text = mailbox.mailbox.signature ? `${input.text}\n\n${mailbox.mailbox.signature}` : input.text
   const messageId = newId('msg')
   const jobId = newId('job')
+  // Replying keeps the conversation together here and in the recipient's client.
+  const parent = input.inReplyTo
+    ? (await db.select({ id: messages.id, threadId: messages.threadId, providerMessageId: messages.providerMessageId, mailboxId: messages.mailboxId }).from(messages).where(eq(messages.id, input.inReplyTo)).limit(1)).at(0)
+    : undefined
+  const threadId = parent ? parent.threadId ?? parent.id : messageId
+  const parentMessageId = parent?.providerMessageId?.replace(/^<|>$/g, '')
+  const headers = parentMessageId ? { 'In-Reply-To': `<${parentMessageId}>`, References: `<${parentMessageId}>` } : undefined
   const payload: OutboundQueueMessage = {
     type: 'outbound-mail',
     jobId,
@@ -73,6 +81,7 @@ export async function queueOutboundEmail(
     subject: input.subject,
     text,
     html: input.html,
+    headers,
   }
 
   await db.batch([
@@ -88,6 +97,7 @@ export async function queueOutboundEmail(
       textBody: text,
       htmlBody: input.html,
       status: input.scheduledAt && input.scheduledAt > new Date() ? 'scheduled' : 'queued',
+      threadId,
     }),
     db.insert(outboundJobs).values({ id: jobId, userId, messageId, payload: JSON.stringify(payload), scheduledAt: input.scheduledAt }),
   ])
@@ -133,12 +143,14 @@ export async function processOutboundEmail(env: CloudflareEnv, payload: Outbound
       subject: payload.subject,
       text: payload.text,
       html: payload.html,
+      headers: payload.headers,
       attachments,
     })
     await db.batch([
       db.update(messages).set({ status: 'sent', providerMessageId: response.messageId }).where(eq(messages.id, payload.messageId)),
       db.update(outboundJobs).set({ status: 'sent', error: null, updatedAt: new Date() }).where(eq(outboundJobs.id, payload.jobId)),
     ])
+    await notifyRealtime(env, [job.userId], { type: 'message:update', messageId: payload.messageId })
     await enqueueWebhookEvent(env, job.userId, 'message.sent', { messageId: payload.messageId, from: payload.from, to: payload.to, subject: payload.subject }).catch((error) => console.error('Webhook enqueue failed', error))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Send failed'
@@ -146,6 +158,7 @@ export async function processOutboundEmail(env: CloudflareEnv, payload: Outbound
       db.update(messages).set({ status: 'failed' }).where(eq(messages.id, payload.messageId)),
       db.update(outboundJobs).set({ status: 'failed', error: message, updatedAt: new Date() }).where(eq(outboundJobs.id, payload.jobId)),
     ])
+    await notifyRealtime(env, [job.userId], { type: 'message:update', messageId: payload.messageId }).catch(() => undefined)
     throw error
   }
 }

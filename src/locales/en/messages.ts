@@ -403,4 +403,6 @@ export const messages = {
   'Push notifications are not configured on the server.': 'Push notifications are not configured on the server.',
   'Push subscription failed': 'Push subscription failed',
   'Not supported in this browser': 'Not supported in this browser',
+  'Expand message': 'Expand message',
+  'Collapse message': 'Collapse message',
 }

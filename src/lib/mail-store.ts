@@ -247,6 +247,17 @@ class MailStore {
     }
   }
 
+  /** Every cached message of a mailbox, newest first (used to assemble conversations across views). */
+  byMailbox(mailboxId: string) {
+    const key = `all:${mailboxId}`
+    const cached = this.viewCache.get(key)
+    if (cached && cached.version === this.version) return cached.rows
+    const rows = [...this.messages.values()].filter((message) => message.mailboxId === mailboxId)
+    rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    this.viewCache.set(key, { version: this.version, rows })
+    return rows
+  }
+
   /** Messages for a view, mirroring the server-side filters in /api/messages. */
   select(view: MailView, mailboxId: string, folderId?: string) {
     const key = `${view}:${mailboxId}:${folderId ?? ''}`

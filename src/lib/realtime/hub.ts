@@ -7,6 +7,12 @@ export type RealtimeNotification = {
 }
 
 export class RealtimeHub extends DurableObject<CloudflareEnv> {
+  constructor(ctx: DurableObjectState, env: CloudflareEnv) {
+    super(ctx, env)
+    // Keepalive pings are answered by the runtime while the object stays hibernated.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'))
+  }
+
   async fetch(request: Request) {
     const url = new URL(request.url)
 

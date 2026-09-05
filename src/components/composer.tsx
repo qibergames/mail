@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { mailStore } from '@/lib/mail-store'
 import { cn } from '@/lib/utils'
 
-export type Draft = { id?: string; to?: string; subject?: string; text?: string }
+export type Draft = { id?: string; to?: string; subject?: string; text?: string; replyTo?: string }
 type ComposerMailbox = { id: string; address: string; name: string | null }
 type Template = { id: string; name: string; subject: string; textBody: string }
 
@@ -79,7 +79,7 @@ export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailbox
     const response = await fetch('/api/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mailboxId: from, draftId: draftId.current, to, subject, text, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined, attachments }),
+      body: JSON.stringify({ mailboxId: from, draftId: draftId.current, inReplyTo: draft.replyTo, to, subject, text, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined, attachments }),
     })
     setSending(false)
     if (!response.ok) {

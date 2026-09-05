@@ -7,6 +7,7 @@ import { formatAddress, parseAddress } from './address'
 import { storeAttachments } from './attachments'
 import { resolveDestination, resolveInbound } from './routing'
 import { removeMessages } from './sync'
+import { parseMessageIds } from './threads'
 import { sendNewMailPush } from '@/lib/push'
 import { enqueueWebhookEvent } from '@/lib/webhooks'
 
@@ -108,6 +109,7 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
   const blocked = (await db.select({ blocked: contacts.blocked }).from(contacts).where(and(eq(contacts.userId, decision.mailbox.userId), eq(contacts.email, senderAddress))).limit(1)).at(0)?.blocked
   const finalStatus = blocked ? 'spam' : destination.status
   const messageId = newId('msg')
+  const threadId = await resolveThreadId(db, decision.mailbox.userId, parsed.inReplyTo, parsed.references, parsed.messageId ?? messageId)
 
   await db.insert(messages).values({
     id: messageId,
@@ -124,7 +126,7 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
     htmlBody: html,
     rawR2Key: payload.rawR2Key,
     status: finalStatus,
-    threadId: parsed.messageId,
+    threadId,
   })
 
   const attachments = parsed.attachments.map((attachment, index) => ({
@@ -205,4 +207,13 @@ export async function listMessagesForMailboxes(mailboxIds: Array<string>, status
     inArray(messages.mailboxId, mailboxIds),
     eq(messages.status, status),
   )).orderBy(sql`${messages.createdAt} DESC`).limit(100)
+}
+
+/** Joins the conversation of any message referenced by the headers; otherwise starts a new one. */
+export async function resolveThreadId(db: ReturnType<typeof getDb>, userId: string, inReplyTo: string | undefined, references: string | undefined, fallback: string) {
+  const ids = [...new Set([...parseMessageIds(inReplyTo), ...parseMessageIds(references)])]
+  if (!ids.length) return fallback
+  const candidates = ids.flatMap((id) => [id, `<${id}>`])
+  const parent = (await db.select({ id: messages.id, threadId: messages.threadId }).from(messages).where(and(eq(messages.userId, userId), inArray(messages.providerMessageId, candidates))).limit(1)).at(0)
+  return parent ? parent.threadId ?? parent.id : fallback
 }

@@ -11,6 +11,7 @@ const sendSchema = z.object({
   text: z.string().max(2_000_000).default(''),
   html: z.string().max(2_000_000).optional(),
   draftId: z.string().optional(),
+  inReplyTo: z.string().optional(),
   scheduledAt: z.iso.datetime().optional(),
   attachments: z.array(z.object({
     filename: z.string().min(1).max(255),

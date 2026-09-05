@@ -403,4 +403,6 @@ export const messages = {
   'Push notifications are not configured on the server.': 'A push értesítések nincsenek beállítva a szerveren.',
   'Push subscription failed': 'A push feliratkozás nem sikerült',
   'Not supported in this browser': 'Ez a böngésző nem támogatja',
+  'Expand message': 'Levél kibontása',
+  'Collapse message': 'Levél összecsukása',
 }
