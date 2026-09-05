@@ -3,6 +3,7 @@ import webPush from 'web-push'
 import { getDb } from '@/db'
 import { messages, pushSubscriptions } from '@/db/schema'
 import { createPushPayload } from './push-payload'
+import { normalizeVapidKey } from './vapid'
 
 type PushError = Error & { statusCode?: number }
 
@@ -11,7 +12,13 @@ export async function sendNewMailPush(
   userIds: Array<string>,
   message: { id: string; mailboxId: string; from: string; subject?: string | null },
 ) {
-  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.VAPID_SUBJECT) return
+  const publicKey = normalizeVapidKey(env.VAPID_PUBLIC_KEY, 65)
+  const privateKey = normalizeVapidKey(env.VAPID_PRIVATE_KEY, 32)
+  if (!publicKey.key || !privateKey.key || !env.VAPID_SUBJECT) {
+    if (env.VAPID_PUBLIC_KEY || env.VAPID_PRIVATE_KEY) console.error('Web Push disabled: invalid VAPID keys', { publicKey: publicKey.error, privateKey: privateKey.error, subject: env.VAPID_SUBJECT ? 'ok' : 'missing' })
+    return
+  }
+  const vapidDetails = { subject: env.VAPID_SUBJECT, publicKey: publicKey.key, privateKey: privateKey.key }
   const db = getDb(env.DB)
   const unread = (await db.select({ value: count() }).from(messages).where(and(
     eq(messages.mailboxId, message.mailboxId),
@@ -33,11 +40,7 @@ export async function sendNewMailPush(
         TTL: 86_400,
         urgency: 'high',
         topic: message.id.replace(/[^A-Za-z0-9_-]/g, '').slice(-32),
-        vapidDetails: {
-          subject: env.VAPID_SUBJECT!,
-          publicKey: env.VAPID_PUBLIC_KEY!,
-          privateKey: env.VAPID_PRIVATE_KEY!,
-        },
+        vapidDetails,
       })
     } catch (error) {
       if ([404, 410].includes((error as PushError).statusCode ?? 0)) {

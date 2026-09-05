@@ -3,11 +3,12 @@ import { Bell, BellOff, LoaderCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
+import { decodeBase64Url, normalizeVapidKey } from '@/lib/vapid'
 
 function applicationServerKey(value: string) {
-  const padding = '='.repeat((4 - value.length % 4) % 4)
-  const bytes = Uint8Array.from(atob((value + padding).replace(/-/g, '+').replace(/_/g, '/')), (character) => character.charCodeAt(0))
-  return bytes.buffer
+  const normalized = normalizeVapidKey(value, 65)
+  if (!normalized.key) throw new Error(`Invalid VAPID public key (${normalized.error})`)
+  return decodeBase64Url(normalized.key)!.buffer as ArrayBuffer
 }
 
 export function PushToggle() {
@@ -51,8 +52,9 @@ export function PushToggle() {
       }
       if (await Notification.requestPermission() !== 'granted') { setSubscribed(false); setFailure(i18n._('Notifications are blocked for this site. Allow them in the browser\'s site settings and try again.')); return }
       const response = await fetch('/api/push')
-      if (!response.ok) throw new Error(i18n._('Push notifications are not configured on the server.'))
-      const { publicKey } = await response.json<{ publicKey: string }>()
+      const body = await response.json<{ publicKey?: string; error?: string }>().catch(() => null)
+      if (!response.ok || !body?.publicKey) throw new Error(body?.error || i18n._('Push notifications are not configured on the server.'))
+      const publicKey = body.publicKey
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey(publicKey),

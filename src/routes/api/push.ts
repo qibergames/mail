@@ -7,6 +7,7 @@ import { pushSubscriptions } from '@/db/schema'
 import { requireSession } from '@/lib/api-auth'
 import { newId } from '@/lib/ids'
 import { isPublicHttpsUrl } from '@/lib/public-url'
+import { normalizeVapidKey } from '@/lib/vapid'
 
 const endpoint = z.string().url().max(2048).refine(isPublicHttpsUrl)
 const subscriptionSchema = z.object({
@@ -22,9 +23,11 @@ export const Route = createFileRoute('/api/push')({
     handlers: {
       GET: async ({ request }) => {
         await requireSession(request)
-        return env.VAPID_PUBLIC_KEY
-          ? Response.json({ publicKey: env.VAPID_PUBLIC_KEY })
-          : Response.json({ error: 'Web Push is not configured' }, { status: 503 })
+        const publicKey = normalizeVapidKey(env.VAPID_PUBLIC_KEY, 65)
+        const privateKey = normalizeVapidKey(env.VAPID_PRIVATE_KEY, 32)
+        if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.VAPID_SUBJECT) return Response.json({ error: 'Web Push is not configured: set VAPID_SUBJECT, VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY' }, { status: 503 })
+        if (!publicKey.key || !privateKey.key) return Response.json({ error: `VAPID keys are invalid (public: ${publicKey.error ?? 'ok'}, private: ${privateKey.error ?? 'ok'}). Regenerate them with "bunx web-push generate-vapid-keys" and set the secrets again.` }, { status: 503 })
+        return Response.json({ publicKey: publicKey.key })
       },
       POST: async ({ request }) => {
         const session = await requireSession(request)
