@@ -424,10 +424,10 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
             </form>
           </header>
 
-          <div ref={splitRef} className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden md:grid-cols-[var(--message-list-width)_0_minmax(0,1fr)]" style={{ '--message-list-width': `${listWidth}px` } as React.CSSProperties}>
-            <section className={cn('flex h-full min-h-0 flex-col overflow-hidden border-r', selected && 'hidden md:flex')}>
+          <div ref={splitRef} className={cn('grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden', selected && 'md:grid-cols-[var(--message-list-width)_0_minmax(0,1fr)]')} style={{ '--message-list-width': `${listWidth}px` } as React.CSSProperties}>
+            <section className={cn('flex h-full min-h-0 flex-col overflow-hidden', selected && 'hidden border-r md:flex')}>
               <div className="flex h-14 shrink-0 items-center gap-1 border-b px-4">
-                {selectedIds.length ? <><span className="mr-2 text-sm">{selectedIds.length}</span><Button variant="ghost" size="icon" onClick={() => bulk({ read: true })} aria-label={i18n._('Mark read')} title={i18n._('Mark read')}><Mail /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'archived' })} aria-label={i18n._('Archive')} title={i18n._('Archive')}><Archive /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'trash' })} aria-label={i18n._('Delete')} title={i18n._('Delete')}><Trash2 /></Button></> : <><h1 className="font-semibold">{folderId ? folders.find((folder) => folder.id === folderId)?.name : <Trans id={navigation.find((item) => item.view === view)?.label ?? 'Inbox'} />}</h1><span className="ml-auto text-sm text-muted-foreground">{messages.length}</span></>}
+                {selectedIds.length ? <><span className="mr-2 text-sm">{selectedIds.length}</span><Button variant="ghost" size="icon" onClick={() => bulk({ read: true })} aria-label={i18n._('Mark read')} title={i18n._('Mark read')}><Mail /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'archived' })} aria-label={i18n._('Archive')} title={i18n._('Archive')}><Archive /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'trash' })} aria-label={i18n._('Delete')} title={i18n._('Delete')}><Trash2 /></Button></> : <><h1 className="font-semibold">{folderId ? folders.find((folder) => folder.id === folderId)?.name : <Trans id={navigation.find((item) => item.view === view)?.label ?? 'Inbox'} />}</h1><span className="ml-auto text-sm text-muted-foreground">{threads.length}</span></>}
               </div>
               <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto">
                 {loading && <div className="grid place-items-center p-12"><LoaderCircle className="animate-spin" /></div>}
@@ -439,11 +439,12 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                     const ids = thread.messages.map((message) => message.id)
                     const checked = ids.every((id) => selectedIds.includes(id))
                     const open = Boolean(selected && ids.includes(selected.id))
+                    const wide = !selected
                     const names = [...new Set(thread.messages.map((message) => view === 'sent' || message.direction === 'outbound' ? i18n._('me') : senderParts(message.fromAddr).name))]
                     const who = view === 'sent' ? senderParts(latest.toAddr).name : names.join(', ')
                     return <ContextMenu key={thread.id}>
                       <ContextMenuTrigger asChild>
-                        <div data-index={row.index} ref={rowVirtualizer.measureElement} style={{ transform: `translateY(${row.start}px)` }} className={cn('absolute inset-x-0 top-0 flex border-b border-l-4 border-l-transparent hover:bg-muted/70', thread.unread && 'border-l-primary bg-primary/10', open && 'bg-secondary')}><label className="grid w-11 shrink-0 place-items-center"><input type="checkbox" checked={checked} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id)))} aria-label={i18n._('Select')} /></label><button type="button" onClick={() => selectMessage(latest)} className="grid min-w-0 flex-1 grid-cols-[1fr_auto] gap-2 p-4 pl-0 text-left"><span className="sr-only">{thread.unread ? i18n._('Unread') : i18n._('Read')}</span><span className="min-w-0"><span className={cn('flex items-center gap-1.5 text-sm', thread.unread ? 'font-semibold' : 'text-muted-foreground')}><span className="truncate">{who}</span>{thread.count > 1 && <span className="shrink-0 rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">{thread.count}</span>}{thread.starred && <Star className="size-3.5 shrink-0 fill-yellow-400 text-yellow-500" />}</span><span className={cn('mt-1 block truncate text-sm', thread.unread ? 'font-semibold' : 'text-muted-foreground')}>{latest.subject || i18n._('(No subject)')}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{latest.snippet}</span></span><span className={cn('text-xs', thread.unread ? 'font-semibold' : 'text-muted-foreground')}>{new Date(latest.createdAt).toLocaleDateString(i18n.locale)}</span></button></div>
+                        <div data-index={row.index} ref={rowVirtualizer.measureElement} style={{ transform: `translateY(${row.start}px)` }} className={cn('absolute inset-x-0 top-0 flex border-b border-l-4 border-l-transparent hover:bg-muted/70', thread.unread && 'border-l-primary bg-primary/10', open && 'bg-secondary')}><label className="grid w-11 shrink-0 place-items-center"><input type="checkbox" checked={checked} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id)))} aria-label={i18n._('Select')} /></label><button type="button" onClick={() => selectMessage(latest)} className={cn('grid min-w-0 flex-1 gap-2 p-4 pl-0 text-left', wide ? 'grid-cols-[1fr_auto] md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] md:items-center md:gap-4 md:py-3' : 'grid-cols-[1fr_auto]')}><span className="sr-only">{thread.unread ? i18n._('Unread') : i18n._('Read')}</span><span className={cn('flex min-w-0 items-center gap-1.5 text-sm', thread.unread ? 'font-semibold' : 'text-muted-foreground')}><span className="truncate">{who}</span>{thread.count > 1 && <span className="shrink-0 rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">{thread.count}</span>}{thread.starred && <Star className="size-3.5 shrink-0 fill-yellow-400 text-yellow-500" />}</span>{wide && <span className={cn('hidden min-w-0 truncate text-sm md:block', thread.unread ? '' : 'text-muted-foreground')}><span className={cn(thread.unread && 'font-semibold', 'text-foreground')}>{latest.subject || i18n._('(No subject)')}</span>{latest.snippet && <span className="text-muted-foreground"> — {latest.snippet}</span>}</span>}<span className={cn('text-xs', thread.unread ? 'font-semibold' : 'text-muted-foreground', wide && 'md:col-start-3 md:row-start-1')}>{new Date(latest.createdAt).toLocaleDateString(i18n.locale)}</span><span className={cn('col-span-2 min-w-0', wide && 'md:hidden')}><span className={cn('mt-1 block truncate text-sm', thread.unread ? 'font-semibold' : 'text-muted-foreground')}>{latest.subject || i18n._('(No subject)')}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{latest.snippet}</span></span></button></div>
                       </ContextMenuTrigger>
                       <ContextMenuContent>
                         <ContextMenuItem onSelect={() => mailStore.update(ids, { read: thread.unread })}>{thread.unread ? <><MailOpen /><Trans id="Mark read" /></> : <><Mail /><Trans id="Mark unread" /></>}</ContextMenuItem>
@@ -461,7 +462,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
               </div>
             </section>
 
-            <button
+            {selected && <button
               type="button"
               role="separator"
               aria-label={i18n._('Resize message list')}
@@ -482,9 +483,9 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                 setListWidth(width)
                 saveListWidth()
               }}
-            ><span className="absolute inset-y-0 left-1/2 w-px bg-border group-hover:bg-primary group-focus-visible:w-0.5 group-focus-visible:bg-primary" /></button>
+            ><span className="absolute inset-y-0 left-1/2 w-px bg-border group-hover:bg-primary group-focus-visible:w-0.5 group-focus-visible:bg-primary" /></button>}
 
-            <section className={cn('h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto', !selected && 'hidden md:block')}>
+            <section className={cn('h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto', !selected && 'hidden')}>
               {selected && conversation ? (
                 <>
                   <div className="sticky top-0 z-10 flex min-h-16 items-center gap-0.5 border-b bg-background/95 px-2 backdrop-blur sm:gap-1 sm:px-3 md:px-5">
