@@ -162,6 +162,27 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
     tabState(SELECTED_STORAGE_KEY, selectedId)
   }, [selectedId])
 
+  // A tapped notification hands the message to this window instead of reloading it.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (event: MessageEvent<{ type?: string; messageId?: string | null; mailboxId?: string | null } | null>) => {
+      if (event.data?.type !== 'open-message' || !event.data.messageId) return
+      if (event.data.mailboxId) setMailboxId(event.data.mailboxId)
+      setSelectedId(event.data.messageId)
+      setMobileMenu(false)
+      void mailStore.sync()
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [])
+
+  // Opening a message from another mailbox (notification, link) switches the mailbox selector to it.
+  useEffect(() => {
+    if (!selectedId) return
+    const target = mailStore.get(selectedId)?.mailboxId
+    if (target && target !== mailboxId && mailboxes.some((mailbox) => mailbox.id === target)) setMailboxId(target)
+  }, [selectedId, storeVersion, mailboxes, mailboxId])
+
   useEffect(() => {
     void mailStore.readMeta<Array<Folder>>('folders').then((cached) => { if (cached) setFolders(cached) })
     void fetch('/api/folders').then((response) => response.json<Array<Folder>>()).then((rows) => { setFolders(rows); void mailStore.writeMeta('folders', rows) }).catch(() => undefined)

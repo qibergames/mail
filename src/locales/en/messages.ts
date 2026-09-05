@@ -405,4 +405,6 @@ export const messages = {
   'Not supported in this browser': 'Not supported in this browser',
   'Expand message': 'Expand message',
   'Collapse message': 'Collapse message',
+  'The service worker did not start. Reload the page and try again.': 'The service worker did not start. Reload the page and try again.',
+  'The browser\'s push service did not respond. Try again in a regular browser window.': 'The browser\'s push service did not respond. Try again in a regular browser window.',
 }

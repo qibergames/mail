@@ -405,4 +405,6 @@ export const messages = {
   'Not supported in this browser': 'Ez a böngésző nem támogatja',
   'Expand message': 'Levél kibontása',
   'Collapse message': 'Levél összecsukása',
+  'The service worker did not start. Reload the page and try again.': 'A service worker nem indult el. Töltsd újra az oldalt, és próbáld újra.',
+  'The browser\'s push service did not respond. Try again in a regular browser window.': 'A böngésző push szolgáltatása nem válaszolt. Próbáld újra egy normál böngészőablakban.',
 }

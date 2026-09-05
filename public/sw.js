@@ -1,4 +1,4 @@
-const VERSION = 'v2'
+const VERSION = 'v3'
 const SHELL_CACHE = `qibermail-shell-${VERSION}`
 const ASSET_CACHE = `qibermail-assets-${VERSION}`
 const MAIL_VIEWS = ['/inbox', '/sent', '/drafts', '/starred', '/snoozed', '/archived', '/spam', '/trash', '/folders/']
@@ -70,7 +70,7 @@ self.addEventListener('push', (event) => {
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       tag: payload.tag || 'qibermail-message',
-      data: { url: payload.url || '/inbox' },
+      data: { url: payload.url || '/inbox', messageId: payload.messageId || null, mailboxId: payload.mailboxId || null },
     }),
     typeof self.navigator.setAppBadge === 'function'
       ? self.navigator.setAppBadge(payload.unread || 1)
@@ -80,12 +80,14 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const target = new URL(event.notification.data?.url || '/inbox', self.location.origin).href
+  const data = event.notification.data || {}
+  const target = new URL(data.url || '/inbox', self.location.origin).href
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windows) => {
     const existing = windows.find((client) => new URL(client.url).origin === self.location.origin)
     if (existing) {
-      await existing.navigate(target)
-      return existing.focus()
+      // Tell the running app to open the message in place; navigate() is unreliable in installed PWAs.
+      existing.postMessage({ type: 'open-message', messageId: data.messageId, mailboxId: data.mailboxId, url: target })
+      try { return await existing.focus() } catch { /* fall through to a new window */ }
     }
     return self.clients.openWindow(target)
   }))

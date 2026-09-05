@@ -11,6 +11,13 @@ function applicationServerKey(value: string) {
   return decodeBase64Url(normalized.key)!.buffer as ArrayBuffer
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms)
+    promise.then((value) => { clearTimeout(timer); resolve(value) }, (error: unknown) => { clearTimeout(timer); reject(error instanceof Error ? error : new Error(String(error))) })
+  })
+}
+
 export function PushToggle() {
   const { i18n } = useLingui()
   const supported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
@@ -38,7 +45,7 @@ export function PushToggle() {
     setBusy(true)
     setFailure('')
     try {
-      const registration = await navigator.serviceWorker.ready
+      const registration = await withTimeout(navigator.serviceWorker.ready, 10_000, i18n._('The service worker did not start. Reload the page and try again.'))
       const current = await registration.pushManager.getSubscription()
       if (current) {
         await fetch('/api/push', {
@@ -55,10 +62,11 @@ export function PushToggle() {
       const body = await response.json<{ publicKey?: string; error?: string }>().catch(() => null)
       if (!response.ok || !body?.publicKey) throw new Error(body?.error || i18n._('Push notifications are not configured on the server.'))
       const publicKey = body.publicKey
-      const subscription = await registration.pushManager.subscribe({
+      // subscribe() never settles when the browser cannot reach its push service (some webviews, blocked networks).
+      const subscription = await withTimeout(registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey(publicKey),
-      })
+      }), 20_000, i18n._('The browser\'s push service did not respond. Try again in a regular browser window.'))
       const saved = await fetch('/api/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

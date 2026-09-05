@@ -31,7 +31,7 @@ export async function sendNewMailPush(
     .where(eq(pushSubscriptions.userId, userId))))).flat()
 
   await Promise.allSettled(subscriptions.map(async (subscription) => {
-    const payload = JSON.stringify(createPushPayload(subscription.locale, message, unread))
+    const payload = JSON.stringify(createPushPayload(subscription.locale, { ...message, mailboxId: message.mailboxId }, unread))
     try {
       await webPush.sendNotification({
         endpoint: subscription.endpoint,
