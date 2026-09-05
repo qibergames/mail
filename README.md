@@ -1,6 +1,8 @@
 # QiberMail
 
-QiberMail is a self-hosted, mobile-ready email application for custom domains on Cloudflare. It is a TanStack Start port inspired by Mailflare, with Better Auth, shadcn/ui, Hungarian and English localization, light/dark mode, shared mailboxes, and installable PWA Web Push notifications.
+QiberMail is a self-hosted, mobile-ready email application for custom domains on Cloudflare. It is a TanStack Start port inspired by [Mailflare](https://github.com/hieunc229/mailflare) by Hieu Nguyen, with Better Auth, shadcn/ui, Hungarian and English localization, light/dark mode, shared mailboxes, and installable PWA Web Push notifications.
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/qibergames/mail)
 
 ## Included
 
@@ -45,7 +47,15 @@ bunx web-push generate-vapid-keys
 
 Put the Better Auth secret, canonical `BETTER_AUTH_URL`, matching VAPID key pair and a scoped Cloudflare token in `.dev.vars`. Turnstile is optional locally and recommended in production.
 
-## Cloudflare deployment
+## One-click deploy
+
+1. **Deploy the app.** Click **Deploy to Cloudflare** above and keep the Worker name `qibermail`. Cloudflare creates the D1 database, R2 bucket, queues, Durable Object and Workflow declared in `wrangler.jsonc` and runs the D1 migrations on deploy.
+2. **Set the secrets** when prompted (or afterwards under *Workers → qibermail → Settings → Variables*): `BETTER_AUTH_SECRET` (`openssl rand -base64 48`), `BETTER_AUTH_URL` (the public HTTPS URL of the deployed app), `CF_TOKEN`, `VAPID_SUBJECT` (a `mailto:` address) and the `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` pair from `bunx web-push generate-vapid-keys`. `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are optional but recommended.
+3. **Complete setup.** Open the deployed URL and follow `/setup` to connect the first domain and create the administrator.
+
+`CF_TOKEN` is a runtime token used to provision Email Routing and Email Sending for the domains you connect; it needs **Zone Read**, **Email Routing Edit**, **Email Routing Rules Write** and **Email Sending Edit** on those zones. It is separate from the token Cloudflare uses to deploy the app.
+
+## Manual Cloudflare deployment
 
 Create the named resources once:
 
@@ -112,4 +122,8 @@ The repo uses Bun only; `bun.lock` is the sole package-manager lockfile.
 
 ## License and origin
 
-QiberMail is licensed under GNU AGPL-3.0-only. It is a modified work based in part on the adjacent Mailflare project; see [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE). Operators who make a modified version available over a network must offer the corresponding source under the AGPL.
+QiberMail is licensed under GNU AGPL-3.0-only. It is a modified work based in part on [Mailflare](https://github.com/hieunc229/mailflare), which is also AGPL-3.0; see [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE). Operators who make a modified version available over a network must offer the corresponding source under the AGPL.
+
+## Credits
+
+QiberMail started as a reimagining of [Mailflare](https://github.com/hieunc229/mailflare), the open-source Cloudflare email client by Hieu Nguyen. The idea of running a whole mailbox on Cloudflare Email Routing, Email Sending, D1 and R2 comes from there; the QiberMail codebase is an independent rewrite.
