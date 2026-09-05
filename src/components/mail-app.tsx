@@ -84,18 +84,35 @@ const navigation = [
 
 const MAILBOX_STORAGE_KEY = 'qibermail:mailbox'
 
+const SELECTED_STORAGE_KEY = 'qibermail:selected-message'
+const CONSUMED_URL_MESSAGE_KEY = 'qibermail:consumed-url-message'
+
 function readSearch(key: string) {
   return typeof location === 'undefined' ? null : new URLSearchParams(location.search).get(key)
 }
 
-function writeSearch(changes: Record<string, string | null>) {
-  if (typeof history === 'undefined') return
-  const url = new URL(location.href)
-  for (const [key, value] of Object.entries(changes)) {
-    if (value) url.searchParams.set(key, value)
-    else url.searchParams.delete(key)
+function tabState(key: string, value?: string | null) {
+  try {
+    if (value === undefined) return sessionStorage.getItem(key)
+    if (value) sessionStorage.setItem(key, value)
+    else sessionStorage.removeItem(key)
+  } catch { /* storage unavailable */ }
+  return null
+}
+
+/**
+ * The open message survives a refresh via sessionStorage. A ?message= link (push notification click)
+ * wins the first time it is seen; after that the tab's own selection takes over, so closing a message
+ * and refreshing does not reopen it. The URL itself is never rewritten: TanStack Router intercepts
+ * history.replaceState and would treat it as a navigation.
+ */
+function initialSelectedMessage() {
+  const fromUrl = readSearch('message')
+  if (fromUrl && tabState(CONSUMED_URL_MESSAGE_KEY) !== fromUrl) {
+    tabState(CONSUMED_URL_MESSAGE_KEY, fromUrl)
+    return fromUrl
   }
-  if (url.href !== location.href) history.replaceState(history.state, '', url)
+  return tabState(SELECTED_STORAGE_KEY)
 }
 
 function storedMailbox() {
@@ -110,7 +127,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   const [folders, setFolders] = useState<Array<Folder>>([])
   const storeVersion = useSyncExternalStore(mailStore.subscribe, mailStore.getVersion, () => 0)
   const [searchResults, setSearchResults] = useState<Array<Message> | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(() => readSearch('message'))
+  const [selectedId, setSelectedId] = useState<string | null>(() => (typeof window === 'undefined' ? null : initialSelectedMessage()))
   const [selectedBody, setSelectedBody] = useState<(Body & { id: string }) | null>(null)
   const [selectedAttachments, setSelectedAttachments] = useState<Array<Attachment>>([])
   const [selectedSecurity, setSelectedSecurity] = useState<SecurityDetails | null>(null)
@@ -141,11 +158,10 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   useEffect(() => {
     if (!mailboxId) return
     try { localStorage.setItem(MAILBOX_STORAGE_KEY, mailboxId) } catch { /* storage unavailable */ }
-    writeSearch({ mailbox: mailboxId })
   }, [mailboxId])
 
   useEffect(() => {
-    writeSearch({ message: selectedId })
+    tabState(SELECTED_STORAGE_KEY, selectedId)
   }, [selectedId])
 
   useEffect(() => {
@@ -404,7 +420,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                 <article className="mx-auto w-full min-w-0 max-w-6xl p-4 md:p-6 lg:px-8">
                   <h2 className="text-xl font-semibold break-words sm:text-2xl">{selected.subject || i18n._('(No subject)')}</h2>
                   <MessageHeader message={selected} security={selectedSecurity} open={detailsOpen} onToggle={() => setDetailsOpen((value) => !value)} ownAddresses={mailboxes.map((mailbox) => mailbox.address)} />
-                  {bodyLoading && !selected.htmlBody && !selected.textBody ? <div className="mt-8 grid place-items-center p-12 text-muted-foreground">{mailStore.offline ? <span className="flex items-center gap-2 text-sm"><CloudOff className="size-4" /><Trans id="This message is not available offline yet." /></span> : <LoaderCircle className="animate-spin" />}</div> : selected.htmlBody ? <iframe title={i18n._('Message content')} sandbox="allow-same-origin" referrerPolicy="no-referrer" className="mt-6 min-h-96 w-[calc(100%+2rem)] max-w-none -mx-4 border-0 bg-white sm:mx-0 sm:w-full md:mt-8" onLoad={(event) => { event.currentTarget.style.height = `${event.currentTarget.contentDocument?.documentElement.scrollHeight ?? 384}px` }} srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;max-width:100%;overflow-x:hidden;word-break:break-word}img,table{max-width:100%!important;height:auto}</style>${resolveInlineImages(selected.htmlBody, selected.id, selectedAttachments)}`} /> : <pre className="mt-8 whitespace-pre-wrap break-words font-sans text-sm leading-7">{selected.textBody || i18n._('This message has no plain-text body.')}</pre>}
+                  {bodyLoading && !selected.htmlBody && !selected.textBody ? <div className="mt-8 grid place-items-center p-12 text-muted-foreground">{mailStore.offline ? <span className="flex items-center gap-2 text-sm"><CloudOff className="size-4" /><Trans id="This message is not available offline yet." /></span> : <LoaderCircle className="animate-spin" />}</div> : selected.htmlBody ? <MessageFrame key={selected.id} title={i18n._('Message content')} html={resolveInlineImages(selected.htmlBody, selected.id, selectedAttachments)} />  : <pre className="mt-8 whitespace-pre-wrap break-words font-sans text-sm leading-7">{selected.textBody || i18n._('This message has no plain-text body.')}</pre>}
                   {selectedAttachments.length > 0 && <div className="mt-8 flex flex-wrap gap-2">{selectedAttachments.map((attachment) => <a key={attachment.id} className="rounded-md border px-3 py-2 text-sm hover:bg-muted" href={`/api/messages/${selected.id}/attachments/${attachment.id}`}>{attachment.filename} · {(attachment.size / 1024).toFixed(0)} KB</a>)}</div>}
                 </article>
                 </>
@@ -479,4 +495,50 @@ function MessageHeader({ message, security, open, onToggle, ownAddresses }: { me
       )}
     </div>
   )
+}
+
+/** Renders the HTML body in a sandboxed iframe that grows with its content, including late-loading images. */
+function MessageFrame({ title, html }: { title: string; html: string }) {
+  const ref = useRef<HTMLIFrameElement>(null)
+  useEffect(() => {
+    const frame = ref.current
+    if (!frame) return
+    let observer: ResizeObserver | undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const fit = () => {
+      const doc = frame.contentDocument
+      if (!doc) return
+      const height = Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight, 200)
+      frame.style.height = `${height}px`
+    }
+    const attach = () => {
+      const doc = frame.contentDocument
+      if (!doc) return
+      fit()
+      observer = new ResizeObserver(fit)
+      observer.observe(doc.documentElement)
+      observer.observe(doc.body)
+      for (const image of Array.from(doc.images)) image.addEventListener('load', fit, { once: true })
+      // Fonts and lazy layout can settle after load; re-measure a few times.
+      let runs = 0
+      const tick = () => { fit(); if (runs++ < 5) timer = setTimeout(tick, 400) }
+      tick()
+    }
+    frame.addEventListener('load', attach)
+    if (frame.contentDocument?.readyState === 'complete' && frame.contentDocument.body.childElementCount) attach()
+    return () => {
+      frame.removeEventListener('load', attach)
+      observer?.disconnect()
+      if (timer) clearTimeout(timer)
+    }
+  }, [html])
+  return <iframe
+    ref={ref}
+    title={title}
+    sandbox="allow-same-origin"
+    referrerPolicy="no-referrer"
+    scrolling="no"
+    className="mt-6 block w-[calc(100%+2rem)] max-w-none -mx-4 min-h-48 border-0 bg-white sm:mx-0 sm:w-full md:mt-8"
+    srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;max-width:100%;overflow-x:hidden;word-break:break-word}img,table{max-width:100%!important;height:auto}</style>${html}`}
+  />
 }

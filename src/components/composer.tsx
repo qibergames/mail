@@ -2,6 +2,8 @@ import { Trans, useLingui } from '@lingui/react'
 import { CalendarClock, ChevronDown, FileText, LoaderCircle, Maximize2, Minimize2, Minus, Paperclip, Send, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from './ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { mailStore } from '@/lib/mail-store'
 import { cn } from '@/lib/utils'
 
 export type Draft = { id?: string; to?: string; subject?: string; text?: string }
@@ -48,7 +50,7 @@ export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailbox
   async function saveDraft(values: { to: string; subject: string; text: string; mailboxId: string }) {
     setSaveState('saving')
     const response = await fetch('/api/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: draftId.current, ...values }) })
-    if (response.ok) { draftId.current = (await response.json<{ id: string }>()).id; setSaveState('saved') } else setSaveState('idle')
+    if (response.ok) { draftId.current = (await response.json<{ id: string }>()).id; setSaveState('saved'); void mailStore.sync() } else setSaveState('idle')
   }
 
   useEffect(() => {
@@ -63,6 +65,7 @@ export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailbox
 
   async function discard() {
     if (draftId.current) await fetch(`/api/drafts?id=${encodeURIComponent(draftId.current)}`, { method: 'DELETE' }).catch(() => undefined)
+    void mailStore.sync()
     close()
   }
 
@@ -102,10 +105,10 @@ export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailbox
       aria-labelledby="composer-title"
       className={cn(
         'fixed z-50 flex flex-col overflow-hidden bg-background shadow-2xl ring-1 ring-black/10 dark:ring-white/10',
-        'inset-0 sm:inset-auto sm:rounded-t-xl',
-        !expanded && !minimized && 'sm:right-6 sm:bottom-0 sm:h-[min(38rem,calc(100dvh-1rem))] sm:w-[34rem]',
-        minimized && 'inset-auto right-4 bottom-0 h-11 w-64 rounded-t-xl sm:right-6 sm:w-72',
-        expanded && 'sm:inset-4 sm:mx-auto sm:max-w-5xl sm:rounded-xl',
+        // Positioning per state. Responsive utilities override plain ones, so every state sets its own sm: offsets.
+        expanded ? 'inset-0 sm:inset-4 sm:mx-auto sm:max-w-5xl sm:rounded-xl' : 'sm:inset-auto sm:right-6 sm:bottom-0 sm:rounded-t-xl',
+        !expanded && !minimized && 'inset-0 sm:h-[min(38rem,calc(100dvh-1rem))] sm:w-[34rem]',
+        minimized && 'right-4 bottom-0 h-11 w-64 rounded-t-xl sm:w-72',
       )}
     >
       <header className="flex h-11 shrink-0 items-center gap-1 bg-zinc-800 px-3 text-white dark:bg-zinc-900">
@@ -117,12 +120,15 @@ export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailbox
 
       <div className={cn('flex min-h-0 flex-1 flex-col', minimized && 'hidden')}>
         <div className="shrink-0 divide-y px-4 text-sm">
-          <label className="flex h-10 items-center gap-3">
+          <div className="flex h-10 items-center gap-3">
             <span className="w-14 shrink-0 text-muted-foreground"><Trans id="From" /></span>
             {mailboxes.length > 1
-              ? <select value={from} onChange={(event) => edit(setFrom)(event.target.value)} className="min-w-0 flex-1 truncate bg-transparent outline-none">{mailboxes.map((item) => <option key={item.id} value={item.id}>{item.name ? `${item.name} <${item.address}>` : item.address}</option>)}</select>
+              ? <Select value={from} onValueChange={edit(setFrom)}>
+                <SelectTrigger aria-label={i18n._('From')} className="h-8 min-w-0 flex-1 justify-start rounded-md border-0 bg-transparent px-2 shadow-none hover:bg-muted [&>span]:truncate"><SelectValue /></SelectTrigger>
+                <SelectContent align="start">{mailboxes.map((item) => <SelectItem key={item.id} value={item.id}><span className="font-medium">{item.name || item.address}</span>{item.name && <span className="ml-2 text-muted-foreground">{item.address}</span>}</SelectItem>)}</SelectContent>
+              </Select>
               : <span className="truncate">{mailbox?.name ? `${mailbox.name} <${mailbox.address}>` : mailbox?.address ?? '—'}</span>}
-          </label>
+          </div>
           <label className="flex h-10 items-center gap-3">
             <span className="w-14 shrink-0 text-muted-foreground"><Trans id="To" /></span>
             <input name="to" type="email" value={to} onChange={(event) => edit(setTo)(event.target.value)} required autoFocus={!draft.to} placeholder={i18n._('Recipient')} className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground/60" />

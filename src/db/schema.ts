@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
@@ -230,7 +229,7 @@ export const messages = sqliteTable(
 		// Bumped on every change so clients can pull deltas; see /api/messages/sync.
 		updatedAt: integer("updated_at", { mode: "timestamp" })
 			.notNull()
-			.default(sql`(unixepoch())`)
+			.$defaultFn(() => new Date())
 			.$onUpdateFn(() => new Date()),
 	},
 	(t) => [

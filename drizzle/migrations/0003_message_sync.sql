@@ -6,5 +6,6 @@ CREATE TABLE `message_tombstones` (
 );
 --> statement-breakpoint
 CREATE INDEX `message_tombstones_user_deleted_idx` ON `message_tombstones` (`user_id`,`deleted_at`);--> statement-breakpoint
-ALTER TABLE `messages` ADD `updated_at` integer DEFAULT (unixepoch()) NOT NULL;--> statement-breakpoint
+ALTER TABLE `messages` ADD `updated_at` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+UPDATE `messages` SET `updated_at` = `created_at`;--> statement-breakpoint
 CREATE INDEX `messages_mailbox_updated_idx` ON `messages` (`mailbox_id`,`updated_at`);
