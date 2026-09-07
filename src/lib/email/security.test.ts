@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { extractSecurityDetails } from './security'
+import { extractHeaderAddresses, extractSecurityDetails } from './security'
 
 test('reads authentication results, sender domains and TLS from raw headers', () => {
   expect(extractSecurityDetails([
@@ -45,4 +45,13 @@ test('reports failed verification and missing encryption', () => {
   expect(extractSecurityDetails([
     { key: 'Authentication-Results', value: 'mx.cloudflare.net; dkim=none; spf=fail smtp.mailfrom=spoof@evil.test; dmarc=fail header.from=bank.test' },
   ])).toMatchObject({ spf: 'fail', dkim: 'none', dmarc: 'fail', mailedBy: 'evil.test', signedBy: null, encryption: 'unknown' })
+})
+
+test('collects header recipients, flattening groups and keeping the first reply-to', () => {
+  expect(extractHeaderAddresses({
+    to: [{ name: 'Dr. Surányi', address: 'drsuranyi@medinice.hu' }, { name: 'undisclosed-recipients', group: [{ name: '', address: 'a@example.com' }] }],
+    cc: [{ name: '', address: 'cc@example.com' }],
+    replyTo: [{ name: 'Sales', address: 'sales@example.com' }],
+  })).toEqual({ to: ['"Dr. Surányi" <drsuranyi@medinice.hu>', 'a@example.com'], cc: ['cc@example.com'], replyTo: '"Sales" <sales@example.com>' })
+  expect(extractHeaderAddresses({})).toEqual({ to: [], cc: [], replyTo: null })
 })

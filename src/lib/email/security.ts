@@ -1,3 +1,5 @@
+import { formatAddress } from './address'
+
 export type SecurityDetails = {
   date: string | null
   mailedBy: string | null
@@ -7,6 +9,22 @@ export type SecurityDetails = {
   dmarc: string | null
   /** 'unknown' when no Received header records the transport (Cloudflare Email Routing does not). */
   encryption: 'tls' | 'none' | 'unknown'
+  /** Recipients as written in the message itself; absent on bodies cached before this was recorded. */
+  addresses?: HeaderAddresses
+}
+
+export type HeaderAddresses = { to: Array<string>; cc: Array<string>; replyTo: string | null }
+
+type ParsedAddress = { name: string; address?: string; group?: Array<{ name: string; address?: string }> }
+
+function flatten(list: Array<ParsedAddress> | undefined) {
+  return (list ?? []).flatMap((entry) => entry.group ?? [entry]).filter((entry) => entry.address).map((entry) => formatAddress(entry.address!, entry.name))
+}
+
+// The To/Cc headers say who the sender claims to write to, while the envelope says where the mail actually
+// went. Bulk senders that hide the real recipient list leave our own address out of both headers.
+export function extractHeaderAddresses(parsed: { to?: Array<ParsedAddress>; cc?: Array<ParsedAddress>; replyTo?: Array<ParsedAddress> }): HeaderAddresses {
+  return { to: flatten(parsed.to), cc: flatten(parsed.cc), replyTo: flatten(parsed.replyTo)[0] ?? null }
 }
 
 type Header = { key: string; value: string }

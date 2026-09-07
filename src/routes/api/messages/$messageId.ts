@@ -6,7 +6,7 @@ import { getDb } from '@/db'
 import { messageAttachments, messages } from '@/db/schema'
 import { requireSession } from '@/lib/api-auth'
 import { accessibleMailboxIds } from '@/lib/email/outbound'
-import { extractSecurityDetails } from '@/lib/email/security'
+import { extractHeaderAddresses, extractSecurityDetails } from '@/lib/email/security'
 import { notifyRealtime } from '@/lib/email/sync'
 
 export const Route = createFileRoute('/api/messages/$messageId')({
@@ -29,7 +29,10 @@ export const Route = createFileRoute('/api/messages/$messageId')({
         const raw = message.rawR2Key ? await env.BUCKET.get(message.rawR2Key) : null
         const security = raw
           ? await raw.arrayBuffer()
-              .then(async (buffer) => extractSecurityDetails((await PostalMime.parse(buffer)).headers))
+              .then(async (buffer) => {
+                const parsed = await PostalMime.parse(buffer)
+                return { ...extractSecurityDetails(parsed.headers), addresses: extractHeaderAddresses(parsed) }
+              })
               .catch(() => null)
           : null
         return Response.json({ message, attachments, security })

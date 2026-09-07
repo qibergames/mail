@@ -586,6 +586,21 @@ function MessageHeader({ message, security, open, onToggle, ownAddresses, onColl
   const { i18n } = useLingui()
   const from = senderParts(message.fromAddr)
   const to = senderParts(message.toAddr)
+  // Like Gmail: the recipient line reflects the To/Cc headers, and a message that reached us without
+  // naming our address in either was sent as a blind copy. Until the body loads we only know the envelope.
+  const own = new Set(ownAddresses.map((address) => address.toLowerCase()))
+  const headerTo = (security?.addresses?.to ?? []).map(senderParts)
+  const headerCc = (security?.addresses?.cc ?? []).map(senderParts)
+  const namedInHeaders = [...headerTo, ...headerCc].some((entry) => own.has(entry.address.toLowerCase()))
+  const blindCopy = security?.addresses ? !namedInHeaders : false
+  const replyTo = security?.addresses?.replyTo ? senderParts(security.addresses.replyTo) : null
+  const summaryRecipient = security?.addresses
+    ? namedInHeaders ? i18n._('me') : headerTo[0] ? headerTo[0].name : i18n._('me')
+    : own.has(to.address.toLowerCase()) ? i18n._('me') : to.address
+  const summaryPrefix = blindCopy && !headerTo.length ? `${i18n._('Bcc').toLowerCase()}: ` : ''
+  const listAddresses = (entries: Array<{ name: string; address: string }>) => entries.map((entry, index) => (
+    <span key={`${entry.address}-${index}`} className="break-words">{entry.name !== entry.address && <>{entry.name} </>}<span className="text-muted-foreground">&lt;{entry.address}&gt;</span>{index < entries.length - 1 && ', '}</span>
+  ))
   const parsedDate = security?.date ? Date.parse(security.date) : Number.NaN
   const date = Number.isNaN(parsedDate) ? new Date(message.createdAt) : new Date(parsedDate)
   const dateLabel = date.toLocaleString(i18n.locale, { dateStyle: 'long', timeStyle: 'short' })
@@ -603,7 +618,7 @@ function MessageHeader({ message, security, open, onToggle, ownAddresses, onColl
             {onCollapse && <button type="button" onClick={onCollapse} className="-mr-1 grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={i18n._('Collapse message')} title={i18n._('Collapse message')}><ChevronUp className="size-4" /></button>}
           </div>
           <button type="button" onClick={onToggle} aria-expanded={open} className="mt-0.5 flex items-center gap-0.5 rounded text-xs text-muted-foreground hover:text-foreground" aria-label={i18n._('Message details')} title={i18n._('Message details')}>
-            <span className="lowercase"><Trans id="To" /></span>: {ownAddresses.includes(to.address) ? i18n._('me') : to.address}
+            <span className="lowercase"><Trans id="To" /></span>: {summaryPrefix}{summaryRecipient}
             <ChevronDown className="size-3.5" />
           </button>
           {open && <button type="button" tabIndex={-1} aria-label={i18n._('Close')} className="fixed inset-0 z-10 cursor-default" onClick={onToggle} />}
@@ -612,8 +627,10 @@ function MessageHeader({ message, security, open, onToggle, ownAddresses, onColl
               <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
                 {label('From')}
                 <dd className="min-w-0 break-words"><strong>{from.name}</strong>{from.address !== from.name && <span className="text-muted-foreground"> &lt;{from.address}&gt;</span>}</dd>
-                {label('To')}
-                <dd className="min-w-0 break-words">{to.address}</dd>
+                {replyTo && replyTo.address.toLowerCase() !== from.address.toLowerCase() && <>{label('Reply to')}<dd className="min-w-0 break-words">{replyTo.address}</dd></>}
+                {(headerTo.length > 0 || !security?.addresses) && <>{label('To')}<dd className="min-w-0 break-words">{headerTo.length ? listAddresses(headerTo) : to.address}</dd></>}
+                {headerCc.length > 0 && <>{label('Cc')}<dd className="min-w-0 break-words">{listAddresses(headerCc)}</dd></>}
+                {blindCopy && <>{label('Bcc')}<dd className="min-w-0 break-words">{to.address}</dd></>}
                 {label('Date')}
                 <dd>{dateLabel}</dd>
                 {label('Subject')}
