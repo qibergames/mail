@@ -9,6 +9,7 @@ import {
   FileText,
   Forward,
   Inbox,
+  Info,
   LoaderCircle,
   LockKeyhole,
   CloudOff,
@@ -22,6 +23,7 @@ import {
   Send,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   Star,
   Trash2,
   TriangleAlert,
@@ -613,9 +615,13 @@ function MessageHeader({ message, security, open, onToggle, ownAddresses, onColl
                   <>
                     {label('Security')}
                     <dd className="flex items-center gap-1.5">
-                      {security.encryption === 'tls'
-                        ? <><LockKeyhole className="size-3.5 shrink-0 text-muted-foreground" /><Trans id="Standard encryption (TLS)" /></>
-                        : <><TriangleAlert className="size-3.5 shrink-0 text-amber-500" /><Trans id="No encryption" /></>}
+                      {security.encryption === 'tls' && <><LockKeyhole className="size-3.5 shrink-0 text-muted-foreground" /><Trans id="Standard encryption (TLS)" /></>}
+                      {security.encryption === 'none' && <><TriangleAlert className="size-3.5 shrink-0 text-amber-500" /><Trans id="No encryption" /></>}
+                      {security.encryption === 'unknown' && (
+                        security.dkim === 'pass' || security.dmarc === 'pass'
+                          ? <><ShieldCheck className="size-3.5 shrink-0 text-muted-foreground" /><Trans id="Sender verified (DKIM)" /></>
+                          : <><Info className="size-3.5 shrink-0 text-muted-foreground" /><Trans id="Encryption not recorded" /></>
+                      )}
                     </dd>
                   </>
                 )}

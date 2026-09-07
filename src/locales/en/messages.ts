@@ -253,6 +253,8 @@ export const messages = {
   'Signed by': 'Signed by',
   Security: 'Security',
   'Standard encryption (TLS)': 'Standard encryption (TLS)',
+  'Sender verified (DKIM)': 'Sender verified (DKIM)',
+  'Encryption not recorded': 'Encryption not recorded',
   'No encryption': 'No encryption',
   'Message details': 'Message details',
   me: 'me',

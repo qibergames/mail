@@ -253,6 +253,8 @@ export const messages = {
   'Signed by': 'Hitelesítő',
   Security: 'Biztonság',
   'Standard encryption (TLS)': 'Normál titkosítás (TLS)',
+  'Sender verified (DKIM)': 'Feladó hitelesítve (DKIM)',
+  'Encryption not recorded': 'A titkosítás nincs rögzítve',
   'No encryption': 'Nincs titkosítás',
   'Message details': 'Levél részletei',
   me: 'én',

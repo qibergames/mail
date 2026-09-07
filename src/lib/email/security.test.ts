@@ -26,15 +26,23 @@ test('falls back to DKIM-Signature and Received-SPF when authentication results 
     date: null,
     mailedBy: 'mailer.example.com',
     signedBy: 'mailer.example.com',
-    spf: null,
+    spf: 'pass',
     dkim: null,
     dmarc: null,
     encryption: 'none',
   })
 })
 
+test('treats a Cloudflare hop without transport details as unknown and reads SPF from Received-SPF', () => {
+  expect(extractSecurityDetails([
+    { key: 'Received', value: 'from a3-16.smtp-out.eu-west-1.amazonses.com (54.240.3.16) by cloudflare-email.net (cloudflare) id jxSjY0euxDfq for <info@example.com>; Sun, 06 Sep 2026 00:53:50 +0000' },
+    { key: 'Received-SPF', value: 'pass (mx.cloudflare.net: domain of bounce@eu-west-1.amazonses.com designates 54.240.3.16 as permitted sender) receiver=mx.cloudflare.net; client-ip=54.240.3.16; envelope-from="bounce@eu-west-1.amazonses.com"; helo=a3-16.smtp-out.eu-west-1.amazonses.com;' },
+    { key: 'Authentication-Results', value: 'mx.cloudflare.net; dkim=pass header.d=getlago.com header.s=abc header.b=CLAWMDU2; dkim=pass header.d=amazonses.com header.s=def header.b=BIPizBIN; dmarc=pass header.from=getlago.com policy.dmarc=none; spf=none (mx.cloudflare.net: no SPF records found for postmaster@a3-16.smtp-out.eu-west-1.amazonses.com) smtp.helo=a3-16.smtp-out.eu-west-1.amazonses.com;' },
+  ])).toMatchObject({ mailedBy: 'eu-west-1.amazonses.com', signedBy: 'getlago.com', spf: 'pass', dkim: 'pass', dmarc: 'pass', encryption: 'unknown' })
+})
+
 test('reports failed verification and missing encryption', () => {
   expect(extractSecurityDetails([
     { key: 'Authentication-Results', value: 'mx.cloudflare.net; dkim=none; spf=fail smtp.mailfrom=spoof@evil.test; dmarc=fail header.from=bank.test' },
-  ])).toMatchObject({ spf: 'fail', dkim: 'none', dmarc: 'fail', mailedBy: 'evil.test', signedBy: null, encryption: 'none' })
+  ])).toMatchObject({ spf: 'fail', dkim: 'none', dmarc: 'fail', mailedBy: 'evil.test', signedBy: null, encryption: 'unknown' })
 })

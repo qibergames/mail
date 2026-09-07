@@ -5,7 +5,8 @@ export type SecurityDetails = {
   spf: string | null
   dkim: string | null
   dmarc: string | null
-  encryption: 'tls' | 'none'
+  /** 'unknown' when no Received header records the transport (Cloudflare Email Routing does not). */
+  encryption: 'tls' | 'none' | 'unknown'
 }
 
 type Header = { key: string; value: string }
@@ -21,18 +22,29 @@ export function extractSecurityDetails(headers: Array<Header>): SecurityDetails 
   const find = (key: string) => headers.filter((header) => header.key.toLowerCase() === key)
   const auth = find('authentication-results').map((header) => header.value).join('; ')
   const result = (method: string) => auth.match(new RegExp(`(?:^|[;\\s])${method}=([a-z]+)`, 'i'))?.[1]?.toLowerCase() ?? null
+  const receivedSpf = find('received-spf')[0]?.value ?? ''
   const mailFrom = auth.match(/smtp\.mailfrom=([^\s;]+)/i)?.[1]
-    ?? find('received-spf')[0]?.value.match(/envelope-from=["']?([^\s;"']+)/i)?.[1]
+    ?? receivedSpf.match(/envelope-from=["']?([^\s;"']+)/i)?.[1]
+  // Cloudflare reports a HELO-only SPF check when the envelope sender differs; the Received-SPF
+  // header carries the envelope-from verdict, which is the one that matters.
+  const spf = auth.match(/spf=([a-z]+)[^;]*smtp\.mailfrom=/i)?.[1]?.toLowerCase()
+    ?? receivedSpf.match(/^\s*([a-z]+)/i)?.[1]?.toLowerCase()
+    ?? result('spf')
   const signer = auth.match(/header\.d=([^\s;]+)/i)?.[1]
     ?? find('dkim-signature')[0]?.value.match(/(?:^|;)\s*d=([^\s;]+)/i)?.[1]
-  const encrypted = find('received').some((header) => /\bE?SMTPSA?\b|\bTLS/i.test(header.value))
+  // "with ESMTPS"/"SMTPS" or a TLS version means the hop was encrypted, "with SMTP"/"ESMTP" means plain text.
+  // Cloudflare Email Routing records neither, so its hops leave the transport unknown.
+  const transports = find('received')
+    .map((header) => header.value.match(/\bwith\s+([A-Z0-9]*SMTPS?A?)\b/i)?.[1].toUpperCase() ?? (/\bTLS\d/i.test(header.value) ? 'TLS' : null))
+    .filter((transport): transport is string => transport !== null)
+  const encryption = transports.some((transport) => transport === 'TLS' || /SMTPSA?$/.test(transport)) ? 'tls' : transports.length ? 'none' : 'unknown'
   return {
     date: find('date')[0]?.value ?? null,
     mailedBy: mailFrom ? domainOf(mailFrom) : null,
     signedBy: signer ? domainOf(signer) : null,
-    spf: result('spf'),
+    spf,
     dkim: result('dkim'),
     dmarc: result('dmarc'),
-    encryption: encrypted ? 'tls' : 'none',
+    encryption,
   }
 }
