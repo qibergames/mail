@@ -1,5 +1,5 @@
 import { Trans, useLingui } from '@lingui/react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import {
   Archive,
   ArrowLeft,
@@ -125,6 +125,7 @@ function storedMailbox() {
 
 export function MailApp({ view, folderId }: { view: MailView; folderId?: string }) {
   const { i18n } = useLingui()
+  const navigate = useNavigate()
   const { data: session } = authClient.useSession()
   const [mailboxes, setMailboxes] = useState<Array<Mailbox>>([])
   const [mailboxId, setMailboxId] = useState('')
@@ -319,6 +320,14 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
     setSelectedId(message.id)
   }
 
+  // Switching mailbox by hand closes the open message; otherwise the mailbox-follows-message effect
+  // above would immediately snap the selector back. A folder of the old mailbox goes back to the inbox.
+  function switchMailbox(id: string) {
+    setSelectedId(null)
+    setMailboxId(id)
+    if (folderId && folders.find((folder) => folder.id === folderId)?.mailboxId !== id) void navigate({ to: '/inbox' })
+  }
+
   function setSelected(message: Message | null) {
     setSelectedId(message?.id ?? null)
   }
@@ -402,7 +411,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
           </nav>
           {folders.some((folder) => folder.mailboxId === mailboxId) && <nav className="grid gap-1 border-t pt-3" aria-label={i18n._('Custom folders')}>{folders.filter((folder) => folder.mailboxId === mailboxId).map((folder) => <Button key={folder.id} asChild variant={folder.id === folderId ? 'secondary' : 'ghost'} className="justify-start rounded-full"><Link to="/folders/$folderId" params={{ folderId: folder.id }}><span className="size-2 rounded-full" style={{ backgroundColor: folder.color }} />{folder.name}</Link></Button>)}</nav>}
           <div className="mt-auto grid gap-3">
-            <Select value={mailboxId} onValueChange={setMailboxId}>
+            <Select value={mailboxId} onValueChange={switchMailbox}>
               <SelectTrigger aria-label={i18n._('Mailbox')} className="h-10 w-full rounded-xl bg-background/60 shadow-none">
                 <SelectValue placeholder={i18n._('Mailbox')} />
               </SelectTrigger>
