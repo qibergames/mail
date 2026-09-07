@@ -12,6 +12,7 @@ import {
   Info,
   LoaderCircle,
   LockKeyhole,
+  LockKeyholeOpen,
   CloudOff,
   ChevronUp,
   LogOut,
@@ -23,7 +24,6 @@ import {
   Send,
   Settings,
   ShieldAlert,
-  ShieldCheck,
   Star,
   Trash2,
   TriangleAlert,
@@ -623,14 +623,11 @@ function MessageHeader({ message, security, open, onToggle, ownAddresses, onColl
                 {security && (
                   <>
                     {label('Security')}
-                    <dd className="flex items-center gap-1.5">
+                    <dd className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                       {security.encryption === 'tls' && <><LockKeyhole className="size-3.5 shrink-0 text-muted-foreground" /><Trans id="Standard encryption (TLS)" /></>}
-                      {security.encryption === 'none' && <><TriangleAlert className="size-3.5 shrink-0 text-amber-500" /><Trans id="No encryption" /></>}
-                      {security.encryption === 'unknown' && (
-                        security.dkim === 'pass' || security.dmarc === 'pass'
-                          ? <><ShieldCheck className="size-3.5 shrink-0 text-muted-foreground" /><Trans id="Sender verified (DKIM)" /></>
-                          : <><Info className="size-3.5 shrink-0 text-muted-foreground" /><Trans id="Encryption not recorded" /></>
-                      )}
+                      {security.encryption === 'none' && <><LockKeyholeOpen className="size-3.5 shrink-0 text-red-500" /><Trans id="No encryption" /></>}
+                      {security.encryption === 'unknown' && <><Info className="size-3.5 shrink-0 text-muted-foreground" /><Trans id="Encryption not recorded" /></>}
+                      <a href={`https://support.google.com/mail/answer/6330403?hl=${i18n.locale}#tls`} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground"><Trans id="Learn more" /></a>
                     </dd>
                   </>
                 )}
