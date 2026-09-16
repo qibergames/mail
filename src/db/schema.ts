@@ -151,6 +151,9 @@ export const contacts = sqliteTable(
 			.notNull()
 			.default("inbound"),
 		blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+		// Set when mail to this address permanently failed (hard bounce or spam complaint); cleared once it works again.
+		undeliverableAt: integer("undeliverable_at", { mode: "timestamp" }),
+		undeliverableReason: text("undeliverable_reason"),
 		lastSeenAt: integer("last_seen_at", { mode: "timestamp" }),
 		createdAt: integer("created_at", { mode: "timestamp" })
 			.notNull()
@@ -223,6 +226,8 @@ export const messages = sqliteTable(
 		starred: integer("starred", { mode: "boolean" }).notNull().default(false),
 		snoozedUntil: integer("snoozed_until", { mode: "timestamp" }),
 		threadId: text("thread_id"),
+		// Why an outbound message never reached its recipient, from a bounce event or delivery status notification.
+		deliveryError: text("delivery_error"),
 		createdAt: integer("created_at", { mode: "timestamp" })
 			.notNull()
 			.$defaultFn(() => new Date()),
@@ -237,6 +242,7 @@ export const messages = sqliteTable(
 		index("messages_mailbox_idx").on(t.mailboxId),
 		index("messages_mailbox_updated_idx").on(t.mailboxId, t.updatedAt),
 		index("messages_folder_idx").on(t.folderId),
+		index("messages_provider_message_idx").on(t.providerMessageId),
 		uniqueIndex("messages_raw_r2_key_idx").on(t.rawR2Key),
 	],
 );
@@ -553,6 +559,12 @@ export const pushSubscriptions = sqliteTable(
 	],
 );
 
+// Workers AI calls per UTC day, so a flood of spam cannot run up the bill.
+export const aiUsage = sqliteTable("ai_usage", {
+	day: text("day").primaryKey(),
+	calls: integer("calls").notNull().default(0),
+});
+
 export const schema = {
 	users,
 	domains,
@@ -580,4 +592,5 @@ export const schema = {
 	backups,
 	appSettings,
 	pushSubscriptions,
+	aiUsage,
 };
