@@ -416,4 +416,8 @@ export const messages = {
   'Earlier mail to this address could not be delivered.': 'Earlier mail to this address could not be delivered.',
   'undeliverable': 'undeliverable',
   'Clear bounce': 'Clear bounce',
+  'Failed jobs': 'Failed jobs',
+  'Mail and events that failed every retry. Retry one after fixing the cause.': 'Mail and events that failed every retry. Retry one after fixing the cause.',
+  'Attempts': 'Attempts',
+  'Retry': 'Retry',
 }

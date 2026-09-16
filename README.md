@@ -63,6 +63,7 @@ bunx wrangler r2 bucket create qibermail-raw
 bunx wrangler queues create qibermail-inbound
 bunx wrangler queues create qibermail-outbound
 bunx wrangler queues create qibermail-email-events
+bunx wrangler queues create qibermail-dlq
 ```
 
 Replace the placeholder `database_id` in `wrangler.jsonc`, verify that `CF_EMAIL_WORKER_NAME` matches the Worker name, then configure secrets:

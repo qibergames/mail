@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { AtSign, DatabaseBackup, Globe2, Mail, Route as RouteIcon, ScrollText, UserRoundCog, Users } from 'lucide-react'
+import { AtSign, DatabaseBackup, Globe2, Mail, Route as RouteIcon, ScrollText, TriangleAlert, UserRoundCog, Users } from 'lucide-react'
 import { SectionShell } from '@/components/section-shell'
 import { getSession } from '@/lib/session'
 
@@ -13,6 +13,7 @@ export const Route = createFileRoute('/admin')({
   component: () => <SectionShell area="admin" title="Administration" items={[
     { section: 'accounts', label: 'Accounts', group: 'Administration', icon: Users },
     { section: 'audit', label: 'Audit log', group: 'Administration', icon: ScrollText },
+    { section: 'failures', label: 'Failed jobs', group: 'Administration', icon: TriangleAlert },
     { section: 'backups', label: 'Backup and restore', group: 'Administration', icon: DatabaseBackup },
     { section: 'domains', label: 'Domains', group: 'Email', icon: Globe2 },
     { section: 'mailboxes', label: 'Mailboxes', group: 'Email', icon: Mail },

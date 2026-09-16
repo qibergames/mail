@@ -1,6 +1,6 @@
 import { Trans, useLingui } from '@lingui/react'
 import type { LucideIcon } from 'lucide-react'
-import { AtSign, ChevronRight, Globe2, LoaderCircle, Mail, Pencil, Plus, Power, Route as RouteIcon, ScrollText, Trash2, UserRoundCheck, UserRoundCog, UserRoundX, Users, X } from 'lucide-react'
+import { AtSign, ChevronRight, Globe2, LoaderCircle, Mail, Pencil, Plus, Power, RotateCcw, Route as RouteIcon, ScrollText, Trash2, TriangleAlert, UserRoundCheck, UserRoundCog, UserRoundX, Users, X } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import type { Status } from './section-ui'
@@ -15,13 +15,15 @@ type AdminData = {
   access: Array<{ id: string; mailboxId: string; userId: string; permission: string }>
   rules: Array<{ id: string; domainId: string; mailboxId: string | null; name: string | null; action: string; pattern: string; forwardTo: string | null; keepCopy: boolean; enabled: boolean; matchCount: number }>
   logs: Array<{ id: string; actorUserId: string | null; action: string; metadata: string | null; createdAt: string }>
+  failures: Array<{ id: string; kind: string; payload: string; attempts: number; createdAt: string }>
 }
 
-type AdminSection = 'accounts' | 'audit' | 'domains' | 'mailboxes' | 'aliases' | 'access' | 'routing'
+type AdminSection = 'accounts' | 'audit' | 'failures' | 'domains' | 'mailboxes' | 'aliases' | 'access' | 'routing'
 
 const sectionDetails: Record<AdminSection, { title: string; description: string; action?: string; hint?: string; icon: LucideIcon }> = {
   accounts: { title: 'Accounts', description: 'Create, disable and assign roles.', action: 'Create account', hint: 'Create a sign-in account and, optionally, its first mailbox.', icon: Users },
   audit: { title: 'Audit log', description: 'Administrative activity across QiberMail.', icon: ScrollText },
+  failures: { title: 'Failed jobs', description: 'Mail and events that failed every retry. Retry one after fixing the cause.', icon: TriangleAlert },
   domains: { title: 'Domains', description: 'Cloudflare Email Routing domains', action: 'Add domain', hint: 'Connect a Cloudflare zone and provision routing automatically.', icon: Globe2 },
   mailboxes: { title: 'Mailboxes', description: 'Personal and shared mailboxes', action: 'Create mailbox', hint: 'Add an address and provision its routing rule automatically.', icon: Mail },
   aliases: { title: 'Aliases', description: 'Additional addresses for a mailbox', action: 'Add alias', hint: 'Route an additional address to an existing mailbox.', icon: AtSign },
@@ -65,6 +67,7 @@ export function AdminApp({ section }: { section: AdminSection }) {
 
   const details = sectionDetails[section]
   const items = section === 'accounts' ? data.users.length
+    : section === 'failures' ? data.failures.length
     : section === 'audit' ? data.logs.length
       : section === 'domains' ? data.domains.length
         : section === 'mailboxes' ? data.mailboxes.length
@@ -85,6 +88,10 @@ export function AdminApp({ section }: { section: AdminSection }) {
       {section === 'aliases' && <ItemGrid>{data.aliases.map((alias) => <ItemCard key={alias.id} icon={AtSign} title={`${alias.localPart}@${data.domains.find((domain) => domain.id === alias.domainId)?.hostname}`} description={`→ ${mailboxAddress(data, alias.mailboxId)}`} actions={<><Button size="icon-sm" variant="ghost" disabled={busy} onClick={() => { setEditingAlias(alias); setCreateOpen(true) }} aria-label={i18n._('Edit alias')} title={i18n._('Edit alias')}><Pencil /></Button><Button size="icon-sm" variant="ghost" className="hover:bg-red-500/10 hover:text-red-600" disabled={busy} onClick={() => { if (confirm(i18n._('Delete this alias?'))) void post({ action: 'alias:delete', aliasId: alias.id }) }} aria-label={i18n._('Delete alias')} title={i18n._('Delete alias')}><Trash2 /></Button></>} />)}</ItemGrid>}
       {section === 'access' && <ItemGrid>{data.access.map((access) => <ItemCard key={access.id} icon={UserRoundCog} title={data.users.find((user) => user.id === access.userId)?.name || access.userId} description={mailboxAddress(data, access.mailboxId)} badges={<Badge>{access.permission}</Badge>} actions={<><Button size="icon-sm" variant="ghost" disabled={busy} onClick={() => { setEditingAccess(access); setCreateOpen(true) }} aria-label={i18n._('Edit access')} title={i18n._('Edit access')}><Pencil /></Button><Button size="icon-sm" variant="ghost" className="hover:bg-red-500/10 hover:text-red-600" disabled={busy} onClick={() => { if (confirm(i18n._('Revoke this access?'))) void post({ action: 'access:delete', accessId: access.id }) }} aria-label={i18n._('Revoke access')} title={i18n._('Revoke access')}><Trash2 /></Button></>} />)}</ItemGrid>}
       {section === 'routing' && <ItemGrid>{data.rules.map((rule) => <ItemCard key={rule.id} icon={RouteIcon} title={rule.name || rule.pattern} description={`${data.domains.find((domain) => domain.id === rule.domainId)?.hostname ?? ''} · ${rule.pattern === '*' ? i18n._('every unmatched address') : rule.pattern} → ${rule.action}${rule.action === 'forward' && rule.forwardTo ? ` ${rule.forwardTo}` : ''}${rule.mailboxId ? ` ${mailboxAddress(data, rule.mailboxId)}` : ''}`} badges={<>{rule.pattern === '*' && <Badge active>catch-all</Badge>}{!rule.enabled && <Badge danger><Trans id="Disabled" /></Badge>}<Badge>{rule.matchCount} {i18n._('matches')}</Badge></>} actions={<><Button size="icon-sm" variant="ghost" disabled={busy} onClick={() => { setEditingRule(rule); setRuleMode(rule.pattern === '*' ? 'catch_all' : 'pattern'); setRuleAction(rule.action === 'forward' || rule.action === 'reject' ? rule.action : 'store'); setCreateOpen(true) }} aria-label={i18n._('Edit rule')} title={i18n._('Edit rule')}><Pencil /></Button><Button size="icon-sm" variant="ghost" disabled={busy} onClick={() => post({ action: 'rule:toggle', ruleId: rule.id, enabled: !rule.enabled })} aria-label={i18n._(rule.enabled ? 'Disable rule' : 'Enable rule')} title={i18n._(rule.enabled ? 'Disable rule' : 'Enable rule')}><Power className={rule.enabled ? 'text-emerald-500' : ''} /></Button><Button size="icon-sm" variant="ghost" className="hover:bg-red-500/10 hover:text-red-600" disabled={busy} onClick={() => { if (confirm(i18n._('Delete this rule?'))) void post({ action: 'rule:delete', ruleId: rule.id }) }} aria-label={i18n._('Delete rule')} title={i18n._('Delete rule')}><Trash2 /></Button></>} />)}</ItemGrid>}
+      {section === 'failures' && <div className="grid gap-2">{data.failures.map((failure) => <ItemCard key={failure.id} icon={TriangleAlert} title={failure.kind} description={`${new Date(failure.createdAt).toLocaleString(i18n.locale)} · ${i18n._('Attempts')}: ${failure.attempts}`} meta={failure.payload.slice(0, 300)} actions={<>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void post({ action: 'failure:retry', failureId: failure.id })}><RotateCcw /><Trans id="Retry" /></Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void post({ action: 'failure:delete', failureId: failure.id })}><Trash2 /><span className="sr-only"><Trans id="Delete" /></span></Button>
+      </>} />)}</div>}
       {section === 'audit' && <div className="grid gap-2">{data.logs.map((log) => <ItemCard key={log.id} icon={ScrollText} title={log.action} description={new Date(log.createdAt).toLocaleString(i18n.locale)} meta={log.metadata} />)}</div>}
     </section>
 

@@ -416,4 +416,8 @@ export const messages = {
   'Earlier mail to this address could not be delivered.': 'Erre a címre korábban nem sikerült levelet kézbesíteni.',
   'undeliverable': 'nem kézbesíthető',
   'Clear bounce': 'Hiba törlése',
+  'Failed jobs': 'Sikertelen feladatok',
+  'Mail and events that failed every retry. Retry one after fixing the cause.': 'Levelek és események, amelyek minden újrapróbálkozás után is hibára futottak. Az ok elhárítása után újrapróbálhatók.',
+  'Attempts': 'Próbálkozások',
+  'Retry': 'Újra',
 }

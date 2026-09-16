@@ -559,6 +559,22 @@ export const pushSubscriptions = sqliteTable(
 	],
 );
 
+// Queue messages that exhausted their retries, kept so an administrator can see and retry them.
+export const queueFailures = sqliteTable(
+	"queue_failures",
+	{
+		id: text("id").primaryKey(),
+		kind: text("kind").notNull(),
+		payload: text("payload").notNull(),
+		attempts: integer("attempts").notNull().default(0),
+		retriedAt: integer("retried_at", { mode: "timestamp" }),
+		createdAt: integer("created_at", { mode: "timestamp" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(t) => [index("queue_failures_created_idx").on(t.createdAt)],
+);
+
 // Workers AI calls per UTC day, so a flood of spam cannot run up the bill.
 export const aiUsage = sqliteTable("ai_usage", {
 	day: text("day").primaryKey(),
@@ -593,4 +609,5 @@ export const schema = {
 	appSettings,
 	pushSubscriptions,
 	aiUsage,
+	queueFailures,
 };

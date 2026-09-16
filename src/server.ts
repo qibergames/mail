@@ -9,6 +9,7 @@ import type { InboundQueueMessage } from '@/lib/email/inbound'
 import { processOutboundEmail, queueScheduledEmails } from '@/lib/email/outbound'
 import type { OutboundQueueMessage } from '@/lib/email/outbound'
 import { RealtimeHub } from '@/lib/realtime/hub'
+import { DEAD_LETTER_QUEUE, recordQueueFailure } from '@/lib/queue-failures'
 import { processWebhook } from '@/lib/webhooks'
 import type { WebhookQueueMessage } from '@/lib/webhooks'
 
@@ -65,7 +66,10 @@ export default {
     for (const message of batch.messages) {
       const body = message.body as QueueMessage
       try {
-        if (isInbound(message.body)) {
+        if (batch.queue === DEAD_LETTER_QUEUE) {
+          await recordQueueFailure(env, message.body, message.attempts)
+          message.ack()
+        } else if (isInbound(message.body)) {
           await processInboundEmail(env, message.body)
           message.ack()
         } else if (isOutbound(message.body)) {

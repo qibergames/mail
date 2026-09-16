@@ -60,9 +60,11 @@
       { "binding": "OUTBOUND_QUEUE", "queue": "qibermail-outbound" }
     ],
     "consumers": [
-      { "queue": "qibermail-inbound", "max_batch_size": 5, "max_retries": 3 },
-      { "queue": "qibermail-outbound", "max_batch_size": 5, "max_retries": 3 },
-      { "queue": "qibermail-email-events", "max_batch_size": 10, "max_retries": 3 }
+      { "queue": "qibermail-inbound", "max_batch_size": 5, "max_retries": 3, "dead_letter_queue": "qibermail-dlq" },
+      { "queue": "qibermail-outbound", "max_batch_size": 5, "max_retries": 3, "dead_letter_queue": "qibermail-dlq" },
+      { "queue": "qibermail-email-events", "max_batch_size": 10, "max_retries": 3, "dead_letter_queue": "qibermail-dlq" },
+      // Whatever still failed after its retries; recorded for the admin section instead of being dropped.
+      { "queue": "qibermail-dlq", "max_batch_size": 10, "max_retries": 3 }
     ]
   },
   "observability": { "enabled": true },

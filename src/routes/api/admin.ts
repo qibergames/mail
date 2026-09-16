@@ -8,6 +8,7 @@ import { describeIssues, errorResponse, requireAdmin } from '@/lib/api-auth'
 import { auth } from '@/lib/auth'
 import { createMailboxRoute, deleteMailboxRoute, deleteMailboxRouteByAddress, deleteSendingSubdomain, provisionDomain } from '@/lib/cloudflare-api'
 import { newId } from '@/lib/ids'
+import { deleteQueueFailure, listQueueFailures, retryQueueFailure } from '@/lib/queue-failures'
 import { hostnameSchema as hostname, localPartSchema as localPart } from '@/lib/validation'
 
 const actionSchema = z.discriminatedUnion('action', [
@@ -27,6 +28,8 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('rule:update'), ruleId: z.string(), mailboxId: z.string().nullable(), name: z.string().trim().min(1).max(100), pattern: z.string().min(1).max(500), actionType: z.enum(['store', 'forward', 'reject']), forwardTo: z.union([z.literal(''), z.email()]), keepCopy: z.boolean(), enabled: z.boolean() }),
   z.object({ action: z.literal('rule:toggle'), ruleId: z.string(), enabled: z.boolean() }),
   z.object({ action: z.literal('rule:delete'), ruleId: z.string() }),
+  z.object({ action: z.literal('failure:retry'), failureId: z.string() }),
+  z.object({ action: z.literal('failure:delete'), failureId: z.string() }),
   z.object({ action: z.literal('rule:create'), domainId: z.string(), mailboxId: z.string().nullable(), name: z.string().trim().min(1).max(100), pattern: z.string().min(1).max(500), actionType: z.enum(['store', 'forward', 'reject']), forwardTo: z.union([z.literal(''), z.email()]), keepCopy: z.boolean() }),
 ])
 
@@ -36,7 +39,7 @@ export const Route = createFileRoute('/api/admin')({
       GET: async ({ request }) => {
         await requireAdmin(request)
         const db = getDb()
-        const [userRows, domainRows, mailboxRows, aliasRows, accessRows, rules, logs] = await Promise.all([
+        const [userRows, domainRows, mailboxRows, aliasRows, accessRows, rules, logs, failures] = await Promise.all([
           db.select({ id: users.id, name: users.name, email: users.email, role: users.role, banned: users.banned, canManageMailboxes: users.canManageMailboxes }).from(users),
           db.select().from(domains),
           db.select({ id: mailboxes.id, userId: mailboxes.userId, domainId: mailboxes.domainId, localPart: mailboxes.localPart, displayName: mailboxes.displayName, type: mailboxes.type, disabled: mailboxes.disabled, hostname: domains.hostname }).from(mailboxes).innerJoin(domains, eq(mailboxes.domainId, domains.id)),
@@ -44,8 +47,9 @@ export const Route = createFileRoute('/api/admin')({
           db.select().from(mailboxAccess),
           db.select().from(routingRules).where(eq(routingRules.scope, 'domain')),
           db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(100),
+          listQueueFailures(),
         ])
-        return Response.json({ users: userRows, domains: domainRows, mailboxes: mailboxRows, aliases: aliasRows, access: accessRows, rules, logs })
+        return Response.json({ users: userRows, domains: domainRows, mailboxes: mailboxRows, aliases: aliasRows, access: accessRows, rules, logs, failures })
       },
       POST: async ({ request }) => {
         const session = await requireAdmin(request)
@@ -196,6 +200,10 @@ async function runAdminAction(request: Request, session: Awaited<ReturnType<type
     const mailbox = (await db.select({ userId: mailboxes.userId }).from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1)).at(0)
     if (!mailbox || mailbox.userId === input.userId) return Response.json({ error: 'Invalid mailbox access' }, { status: 400 })
     await db.insert(mailboxAccess).values({ id: newId('acc'), mailboxId: input.mailboxId, userId: input.userId, permission: input.permission, createdByUserId: session.user.id }).onConflictDoUpdate({ target: [mailboxAccess.mailboxId, mailboxAccess.userId], set: { permission: input.permission, createdByUserId: session.user.id } })
+  } else if (input.action === 'failure:retry') {
+    if (!await retryQueueFailure(env, input.failureId)) return Response.json({ error: 'Unknown failed job' }, { status: 404 })
+  } else if (input.action === 'failure:delete') {
+    await deleteQueueFailure(input.failureId)
   } else if (input.action === 'rule:toggle') {
     const updated = await db.update(routingRules).set({ enabled: input.enabled }).where(and(eq(routingRules.id, input.ruleId), eq(routingRules.scope, 'domain'))).returning({ id: routingRules.id })
     if (!updated.length) return Response.json({ error: 'Unknown rule' }, { status: 404 })

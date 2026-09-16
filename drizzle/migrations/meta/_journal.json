@@ -36,6 +36,13 @@
       "when": 1789410676033,
       "tag": "0004_spam_and_bounces",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789532938352,
+      "tag": "0005_queue_failures",
+      "breakpoints": true
     }
   ]
 }
