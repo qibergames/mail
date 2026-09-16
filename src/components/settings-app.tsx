@@ -1,6 +1,6 @@
 import { Trans, useLingui } from '@lingui/react'
 import type { LucideIcon } from 'lucide-react'
-import { Bell, Folder, KeyRound, Languages, ListFilter, Mail, Palette, Pencil, Plus, Save, SunMoon, Trash2, UserRound } from 'lucide-react'
+import { Bell, Folder, KeyRound, Languages, ListFilter, LoaderCircle, Mail, Palette, Pencil, Plus, Save, SunMoon, Trash2, UserRound, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { LocaleToggle } from './locale-toggle'
 import { PushToggle } from './push-toggle'
@@ -9,6 +9,7 @@ import { CheckboxField, Field, Loading, SectionHeader, SelectField, StatusBanner
 import { ThemeToggle } from './theme-toggle'
 import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Input } from './ui/input'
 import { authClient } from '@/lib/auth-client'
 
 type Settings = {
@@ -138,6 +139,7 @@ export function SettingsApp({ section }: { section: SettingsSection }) {
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-red-500/10 hover:text-red-600" onClick={() => remove('rule', rule.id)} aria-label={i18n._('Delete')} title={i18n._('Delete')}><Trash2 /></Button>
                   </div>)}
                 </div>}
+                <RuleDrafter mailboxId={mailbox.id} onDraft={(draft) => setEditingRule({ id: '', mailboxId: mailbox.id, name: '', ...draft })} />
                 {(() => { const editing = editingRule?.mailboxId === mailbox.id ? editingRule : null; return <form key={editing?.id ?? 'new'} className="grid gap-3 md:grid-cols-3" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const body = { mailboxId: mailbox.id, name: form.get('name'), matchField: form.get('matchField'), matchOperator: form.get('matchOperator'), matchValue: form.get('matchValue'), action: form.get('action'), folderId: form.get('folderId') || null }; void update(editing ? { type: 'rule:update', ruleId: editing.id, ...body } : { type: 'rule', ...body }); if (!editing) event.currentTarget.reset() }}>
                   <Field label="Rule name" name="name" defaultValue={editing?.name ?? ''} required />
                   <SelectField label="Match field" name="matchField" defaultValue={editing?.matchField} options={['sender', 'recipient', 'title', 'content']} />
@@ -154,6 +156,32 @@ export function SettingsApp({ section }: { section: SettingsSection }) {
       })}
     </>
   )
+}
+
+/** Describe a rule in a sentence; the draft comes back into the form below for review. */
+function RuleDrafter({ mailboxId, onDraft }: { mailboxId: string; onDraft: (draft: { matchField: string; matchOperator: string; matchValue: string; action: string; folderId: string | null }) => void }) {
+  const { i18n } = useLingui()
+  const [sentence, setSentence] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  return <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => {
+    event.preventDefault()
+    if (!sentence.trim() || busy) return
+    setBusy(true)
+    setFailed(false)
+    void fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mailboxId, sentence }) })
+      .then(async (response) => {
+        if (!response.ok) return setFailed(true)
+        onDraft(await response.json())
+        setSentence('')
+      })
+      .catch(() => setFailed(true))
+      .finally(() => setBusy(false))
+  }}>
+    <Input className="h-9 min-w-0 flex-1" value={sentence} onChange={(event) => setSentence(event.target.value)} placeholder={i18n._('Describe a rule, for example: file Stripe receipts into Accounting')} aria-label={i18n._('Describe a rule')} />
+    <Button type="submit" variant="outline" disabled={busy || !sentence.trim()}>{busy ? <LoaderCircle className="animate-spin" /> : <Wand2 />}<Trans id="Draft rule" /></Button>
+    {failed && <p className="w-full text-xs text-red-600 dark:text-red-400"><Trans id="Could not turn that into a rule. Fill the fields in below." /></p>}
+  </form>
 }
 
 function Preference({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: React.ReactNode }) {

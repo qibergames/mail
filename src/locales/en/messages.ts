@@ -428,4 +428,8 @@ export const messages = {
   'Forums': 'Forums',
   'This message asks for credentials or payment in a way that looks deceptive.': 'This message asks for credentials or payment in a way that looks deceptive.',
   'Check the sender address before you act on it.': 'Check the sender address before you act on it.',
+  'Draft rule': 'Draft rule',
+  'Describe a rule': 'Describe a rule',
+  'Describe a rule, for example: file Stripe receipts into Accounting': 'Describe a rule, for example: file Stripe receipts into Accounting',
+  'Could not turn that into a rule. Fill the fields in below.': 'Could not turn that into a rule. Fill the fields in below.',
 }

@@ -3,7 +3,9 @@ import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { getDb } from '@/db'
 import { domains, folders, mailboxes, routingRules, users } from '@/db/schema'
+import { env } from 'cloudflare:workers'
 import { requireSession } from '@/lib/api-auth'
+import { draftRule } from '@/lib/email/rule-draft'
 import { newId } from '@/lib/ids'
 
 const updateSchema = z.discriminatedUnion('type', [
@@ -14,6 +16,8 @@ const updateSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('rule:update'), mailboxId: z.string(), ruleId: z.string(), name: z.string().trim().min(1).max(100), matchField: z.enum(['content', 'title', 'sender', 'recipient']), matchOperator: z.enum(['contains', 'exact', 'starts_with', 'ends_with', 'regex']), matchValue: z.string().min(1).max(500), action: z.enum(['store', 'spam', 'trash']), folderId: z.string().nullable() }),
   z.object({ type: z.literal('rule'), mailboxId: z.string(), name: z.string().trim().min(1).max(100), matchField: z.enum(['content', 'title', 'sender', 'recipient']), matchOperator: z.enum(['contains', 'exact', 'starts_with', 'ends_with', 'regex']), matchValue: z.string().min(1).max(500), action: z.enum(['store', 'spam', 'trash']), folderId: z.string().nullable() }),
 ])
+
+const draftSchema = z.object({ mailboxId: z.string(), sentence: z.string().trim().min(3).max(500) })
 
 export const Route = createFileRoute('/api/settings')({
   server: {
@@ -46,6 +50,18 @@ export const Route = createFileRoute('/api/settings')({
           ? await Promise.all(mailboxIds.map((mailboxId) => db.select().from(routingRules).where(and(eq(routingRules.mailboxId, mailboxId), eq(routingRules.scope, 'mailbox')))))
           : []
         return Response.json({ profile, mailboxes: boxes, folders: boxFolders.flat(), rules: boxRules.flat() })
+      },
+      // Drafts a rule from a sentence; the user reviews and saves it with the ordinary PATCH below.
+      POST: async ({ request }) => {
+        const session = await requireSession(request)
+        const parsed = draftSchema.safeParse(await request.json().catch(() => null))
+        if (!parsed.success) return Response.json({ error: 'Invalid rule request' }, { status: 400 })
+        const db = getDb()
+        const owned = (await db.select({ id: mailboxes.id }).from(mailboxes).where(and(eq(mailboxes.id, parsed.data.mailboxId), eq(mailboxes.userId, session.user.id))).limit(1)).at(0)
+        if (!owned) return new Response('Forbidden', { status: 403 })
+        const boxFolders = await db.select({ id: folders.id, name: folders.name }).from(folders).where(eq(folders.mailboxId, owned.id))
+        const draft = await draftRule(env, db, parsed.data.sentence, boxFolders)
+        return draft ? Response.json(draft) : Response.json({ error: 'Could not turn that into a rule' }, { status: 422 })
       },
       PATCH: async ({ request }) => {
         const session = await requireSession(request)

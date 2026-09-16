@@ -11,10 +11,11 @@ const TIMEOUT_MS = 8000
 export type MailCategory = 'primary' | 'promotions' | 'updates' | 'social' | 'forums'
 export const MAIL_CATEGORIES: Array<MailCategory> = ['primary', 'promotions', 'updates', 'social', 'forums']
 
-type ChoiceAnswer = { type: 'choice'; choice: string; probabilities: Record<string, number>; confidence: number }
-type ScoreAnswer = { type: 'score'; score: number; legend: Record<string, string>; probabilities: Record<string, number>; confidence: number }
-type NoulAnswer = { type: 'noul'; noul: number }
-type Answer = ChoiceAnswer | ScoreAnswer | NoulAnswer
+export type ChoiceAnswer = { type: 'choice'; choice: string; probabilities: Record<string, number>; confidence: number }
+export type ScoreAnswer = { type: 'score'; score: number; legend: Record<string, string>; probabilities: Record<string, number>; confidence: number }
+export type NoulAnswer = { type: 'noul'; noul: number }
+export type Answer = ChoiceAnswer | ScoreAnswer | NoulAnswer
+export type Answers = Record<string, Answer | undefined>
 
 export type MailState = {
   from: string
@@ -100,7 +101,7 @@ const noul = (answer: Answer | undefined) => answer?.type === 'noul' ? answer.no
  * One request per inbound message, answering everything the mailbox wants to know about it. Returns null
  * when the key is missing or the call fails, so mail is always delivered on the transport signals alone.
  */
-export async function judgeMail(env: CloudflareEnv, db: AppDatabase, state: MailState): Promise<MailJudgment | null> {
+export async function askJudgment(env: CloudflareEnv, db: AppDatabase, state: unknown, asked: Record<string, unknown>): Promise<Answers | null> {
   if (!env.TYPESAFE_API_KEY) return null
   if (!(await env.AI_JUDGMENT_RATE_LIMIT.limit({ key: 'mail' })).success) return null
   if (!(await reserveAiBudget(db, 'typesafe', TYPESAFE_DAILY_LIMIT))) return null
@@ -109,33 +110,34 @@ export async function judgeMail(env: CloudflareEnv, db: AppDatabase, state: Mail
       method: 'POST',
       headers: { Authorization: `Bearer ${env.TYPESAFE_API_KEY}`, 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      body: JSON.stringify({
-        model: MODEL,
-        state: {
-          email: { from: state.from, to: state.to, subject: state.subject ?? '', body: state.body.slice(0, BODY_CHARS) },
-          ...(state.candidateCodes?.length ? { candidate_codes: state.candidateCodes } : {}),
-        },
-        questions: questions(state),
-      }),
+      body: JSON.stringify({ model: MODEL, state, questions: asked }),
     })
     if (!response.ok) throw new Error(`TypeSafe responded ${response.status}: ${(await response.text()).slice(0, 200)}`)
-    const answers = (await response.json<{ answers?: Record<string, Answer | undefined> }>()).answers ?? {}
-    const category = answers.category
-    const importance = answers.importance
-    const code = answers.login_code
-    return {
-      category: category?.type === 'choice' && MAIL_CATEGORIES.includes(category.choice as MailCategory) ? category.choice as MailCategory : null,
-      categoryConfidence: category?.type === 'choice' ? category.confidence : 0,
-      importance: importance?.type === 'score' ? importance.score : null,
-      unsolicited: noul(answers.unsolicited),
-      phishing: noul(answers.phishing),
-      expectsReply: noul(answers.expects_reply),
-      meeting: noul(answers.meeting),
-      loginCode: code?.type === 'choice' && code.choice !== 'none' && code.confidence >= 0.6 ? code.choice : null,
-    }
+    return (await response.json<{ answers?: Answers }>()).answers ?? {}
   } catch (error) {
     console.error('TypeSafe judgment failed', error)
     return null
+  }
+}
+
+export async function judgeMail(env: CloudflareEnv, db: AppDatabase, state: MailState): Promise<MailJudgment | null> {
+  const answers = await askJudgment(env, db, {
+    email: { from: state.from, to: state.to, subject: state.subject ?? '', body: state.body.slice(0, BODY_CHARS) },
+    ...(state.candidateCodes?.length ? { candidate_codes: state.candidateCodes } : {}),
+  }, questions(state))
+  if (!answers) return null
+  const category = answers.category
+  const importance = answers.importance
+  const code = answers.login_code
+  return {
+    category: category?.type === 'choice' && MAIL_CATEGORIES.includes(category.choice as MailCategory) ? category.choice as MailCategory : null,
+    categoryConfidence: category?.type === 'choice' ? category.confidence : 0,
+    importance: importance?.type === 'score' ? importance.score : null,
+    unsolicited: noul(answers.unsolicited),
+    phishing: noul(answers.phishing),
+    expectsReply: noul(answers.expects_reply),
+    meeting: noul(answers.meeting),
+    loginCode: code?.type === 'choice' && code.choice !== 'none' && code.confidence >= 0.6 ? code.choice : null,
   }
 }
 

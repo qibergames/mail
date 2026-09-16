@@ -428,4 +428,8 @@ export const messages = {
   'Forums': 'Fórumok',
   'This message asks for credentials or payment in a way that looks deceptive.': 'Ez a levél megtévesztő módon kér belépési adatot vagy fizetést.',
   'Check the sender address before you act on it.': 'Ellenőrizd a feladó címét, mielőtt bármit tennél.',
+  'Draft rule': 'Szabály tervezése',
+  'Describe a rule': 'Írd le a szabályt',
+  'Describe a rule, for example: file Stripe receipts into Accounting': 'Írd le a szabályt, például: a Stripe nyugtákat tedd a Könyvelés mappába',
+  'Could not turn that into a rule. Fill the fields in below.': 'Ebből nem sikerült szabályt készíteni. Töltsd ki a mezőket alább.',
 }
