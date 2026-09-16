@@ -42,6 +42,9 @@ export type EmailSendingEvent = {
     subject?: string
     delivery?: { smtpEnhancedStatusCode?: string; smtpResponse?: string }
     bounce?: { type?: 'hard' | 'soft'; reason?: string }
+    failure?: { reason?: string }
+    /** Rejected before delivery: a suppressed recipient, validation or spam policy. */
+    rejection?: { reason?: string; detail?: string }
   }
 }
 

@@ -56,6 +56,12 @@ export async function handleEmailSendingEvent(env: CloudflareEnv, event: EmailSe
   const smtp = payload.bounce?.reason ?? payload.delivery?.smtpResponse
   if (event.type === 'cf.email.sending.message.bounced') {
     await recordDeliveryFailure(env, { ...lookup, reason: smtp ?? 'Delivery failed', permanent: payload.bounce?.type !== 'soft' })
+  } else if (event.type === 'cf.email.sending.message.rejected') {
+    // Cloudflare suppresses addresses that hard bounced or complained before, so these sends never leave.
+    const rejection = payload.rejection
+    await recordDeliveryFailure(env, { ...lookup, reason: rejection?.detail ?? rejection?.reason ?? 'Rejected before delivery', permanent: rejection?.reason === 'suppressed' })
+  } else if (event.type === 'cf.email.sending.message.failed') {
+    await recordDeliveryFailure(env, { ...lookup, reason: payload.failure?.reason ?? 'Delivery failed', permanent: false })
   } else if (event.type === 'cf.email.sending.message.complained') {
     const db = getDb(env.DB)
     const message = await findOutboundMessage(db, lookup)
