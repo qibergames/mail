@@ -1,6 +1,9 @@
 export {}
 
 declare global {
+  /** Injected by vite.config.ts from the commit being built. */
+  const __APP_VERSION__: { sha: string; builtAt: string }
+
   interface QiberMailSecrets {
     BETTER_AUTH_SECRET: string
     BETTER_AUTH_URL: string

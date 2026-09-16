@@ -435,4 +435,11 @@ export const messages = {
   'Add to calendar': 'Hozzáadás a naptárhoz',
   'Added to your calendar.': 'Hozzáadva a naptáradhoz.',
   'No appointment found in this message.': 'Ebben a levélben nem találtam időpontot.',
+  'A new version of QiberMail is available.': 'Elérhető a QiberMail új verziója.',
+  'New version available, refresh': 'Új verzió érhető el, frissítés',
+  'Switch mailbox': 'Postaláda váltása',
+  'Updated {time}': 'Frissítve {time}',
+  Version: 'Verzió',
+  'Version {sha}, built {time}': '{sha} verzió, kiadva: {time}',
+  'Account menu': 'Fiók menü',
 }

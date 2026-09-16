@@ -1,6 +1,7 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
+import { UpdateNotice } from '@/components/app-version'
 import { LocaleProvider } from '@/components/locale-provider'
 import { ServiceWorker } from '@/components/service-worker'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -47,7 +48,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <LocaleProvider locale={locale}>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>{children}<UpdateNotice /></ThemeProvider>
         </LocaleProvider>
         <ServiceWorker />
         <Scripts />

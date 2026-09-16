@@ -435,4 +435,11 @@ export const messages = {
   'Add to calendar': 'Add to calendar',
   'Added to your calendar.': 'Added to your calendar.',
   'No appointment found in this message.': 'No appointment found in this message.',
+  'A new version of QiberMail is available.': 'A new version of QiberMail is available.',
+  'New version available, refresh': 'New version available, refresh',
+  'Switch mailbox': 'Switch mailbox',
+  'Updated {time}': 'Updated {time}',
+  Version: 'Version',
+  'Version {sha}, built {time}': 'Version {sha}, built {time}',
+  'Account menu': 'Account menu',
 }

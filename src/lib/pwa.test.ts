@@ -10,5 +10,7 @@ describe('PWA metadata', () => {
     const worker = await Bun.file('public/sw.js').text()
     expect(worker).toContain("addEventListener('push'")
     expect(worker).toContain("addEventListener('notificationclick'")
+    // The build stamps the cache version with the commit so every deploy starts with fresh caches.
+    expect(worker).toContain("const VERSION = '__QIBERMAIL_VERSION__'")
   })
 })

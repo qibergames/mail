@@ -2,6 +2,7 @@ import { Trans, useLingui } from '@lingui/react'
 import { Link, Outlet } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft } from 'lucide-react'
+import { AppVersion } from './app-version'
 import { Button } from './ui/button'
 
 export type SectionNavItem = { section: string; label: string; group: string; icon: LucideIcon }
@@ -24,6 +25,7 @@ export function SectionShell({ area, title, items }: { area: 'settings' | 'tools
                 {items.filter((item) => item.group === group).map((item) => <SectionLink key={item.section} area={area} item={item} />)}
               </nav>
             </section>)}
+            <AppVersion className="hidden px-3 lg:block" />
           </div>
         </aside>
         <section className="min-w-0 space-y-4 md:space-y-5"><Outlet /></section>

@@ -1,4 +1,5 @@
-const VERSION = 'v3'
+// Replaced with the commit being built (see vite.config.ts) so every deploy starts with fresh caches.
+const VERSION = '__QIBERMAIL_VERSION__'
 const SHELL_CACHE = `qibermail-shell-${VERSION}`
 const ASSET_CACHE = `qibermail-assets-${VERSION}`
 const MAIL_VIEWS = ['/inbox', '/sent', '/drafts', '/starred', '/snoozed', '/archived', '/spam', '/trash', '/folders/']
