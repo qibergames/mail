@@ -412,4 +412,8 @@ export const messages = {
   'Collapse message': 'Collapse message',
   'The service worker did not start. Reload the page and try again.': 'The service worker did not start. Reload the page and try again.',
   'The browser\'s push service did not respond. Try again in a regular browser window.': 'The browser\'s push service did not respond. Try again in a regular browser window.',
+  'This message could not be delivered.': 'This message could not be delivered.',
+  'Earlier mail to this address could not be delivered.': 'Earlier mail to this address could not be delivered.',
+  'undeliverable': 'undeliverable',
+  'Clear bounce': 'Clear bounce',
 }

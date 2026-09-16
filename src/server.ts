@@ -2,6 +2,8 @@ import handler, { createServerEntry } from '@tanstack/react-start/server-entry'
 import { DatabaseBackupWorkflow } from '@/lib/backups/workflow'
 import { startScheduledBackup } from '@/lib/backups/schedule'
 import { auth } from '@/lib/auth'
+import { handleEmailSendingEvent } from '@/lib/email/bounces'
+import { isEmailSendingEvent } from '@/lib/email/delivery-report'
 import { acceptInboundEmail, processInboundEmail } from '@/lib/email/inbound'
 import type { InboundQueueMessage } from '@/lib/email/inbound'
 import { processOutboundEmail, queueScheduledEmails } from '@/lib/email/outbound'
@@ -68,6 +70,9 @@ export default {
           message.ack()
         } else if (isOutbound(message.body)) {
           await processOutboundEmail(env, message.body)
+          message.ack()
+        } else if (isEmailSendingEvent(message.body)) {
+          await handleEmailSendingEvent(env, message.body)
           message.ack()
         } else if (isWebhook(message.body)) {
           await processWebhook(env, message.body)

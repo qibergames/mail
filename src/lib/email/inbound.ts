@@ -5,9 +5,12 @@ import { autoReplyDeliveries, contacts, domains, mailboxAccess, messages, routin
 import { newId } from '@/lib/ids'
 import { formatAddress, parseAddress } from './address'
 import { storeAttachments } from './attachments'
-import { snippetFrom, textFromHtml } from './html'
+import { recordDeliveryFailure } from './bounces'
+import { parseDeliveryReport } from './delivery-report'
+import { readableText, snippetFrom, textFromHtml } from './html'
 import { resolveDestination, resolveInbound } from './routing'
-import { classifySpam } from './spam'
+import { classifySpam, needsSecondOpinion } from './spam'
+import { isConfidentSpam, judgeSpamWithAi, reserveAiBudget } from './spam-ai'
 import { removeMessages } from './sync'
 import { parseMessageIds } from './threads'
 import { sendNewMailPush } from '@/lib/push'
@@ -105,18 +108,36 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
   })
   const senderAddress = (parsed.from && 'address' in parsed.from ? parsed.from.address ?? payload.from : payload.from).toLowerCase()
   const blocked = (await db.select({ blocked: contacts.blocked }).from(contacts).where(and(eq(contacts.userId, decision.mailbox.userId), eq(contacts.email, senderAddress))).limit(1)).at(0)?.blocked
+  // A delivery status notification about one of our own sent messages updates that message and is never spam.
+  const report = parseDeliveryReport(parsed)
+  const ownBounce = report
+    ? (await Promise.all(report.failures.map((failure) => recordDeliveryFailure(env, {
+        providerMessageId: report.originalMessageId,
+        recipient: failure.recipient,
+        reason: failure.reason,
+        permanent: failure.status?.startsWith('5') ?? true,
+      })))).some(Boolean)
+    : false
   // A rule that files the message somewhere is the user's own decision, so the spam filter only judges the rest.
-  const unfiled = destination.status === 'received' && !destination.folderId
-  const verdict = !blocked && unfiled
-    ? classifySpam({
+  const unfiled = destination.status === 'received' && !destination.folderId && !ownBounce
+  const signals = !blocked && unfiled
+    ? {
         headers: parsed.headers,
         envelopeTo: payload.to,
         from: senderAddress,
         recipients: [...(parsed.to ?? []), ...(parsed.cc ?? [])].flatMap((entry) => entry.group ?? [entry]).flatMap((entry) => entry.address ? [entry.address] : []),
         hostedDomains: (await db.select({ hostname: domains.hostname }).from(domains)).map((domain) => domain.hostname),
         senderDomainHistory: await senderDomainHistory(db, decision.mailbox.userId, senderAddress),
-      })
+      }
     : null
+  let verdict = signals ? classifySpam(signals) : null
+  if (signals && verdict && needsSecondOpinion(verdict)) {
+    const opinion = await judgeSpamWithAi(
+      { ai: env.AI, rateLimit: env.AI_SPAM_RATE_LIMIT, reserveBudget: () => reserveAiBudget(db) },
+      { from: senderAddress, to: payload.to, subject: parsed.subject, text: readableText(text, html) },
+    )
+    if (isConfidentSpam(opinion)) verdict = classifySpam({ ...signals, aiFlagged: true })
+  }
   if (verdict?.spam) console.log('Inbound message classified as spam', { from: senderAddress, to: payload.to, score: verdict.score, reasons: verdict.reasons })
   const finalStatus = blocked || verdict?.spam ? 'spam' : destination.status
   const messageId = newId('msg')
@@ -163,7 +184,8 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
     lastSeenAt: new Date(),
   }).onConflictDoUpdate({
     target: [contacts.userId, contacts.email],
-    set: { lastSeenAt: new Date() },
+    // Mail from an address shows it exists again, so drop an earlier bounce warning unless this is spam.
+    set: finalStatus === 'spam' ? { lastSeenAt: new Date() } : { lastSeenAt: new Date(), undeliverableAt: null, undeliverableReason: null },
   })
 
   const access = await db.select({ userId: mailboxAccess.userId }).from(mailboxAccess).where(eq(mailboxAccess.mailboxId, decision.mailbox.id))

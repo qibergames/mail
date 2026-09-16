@@ -13,6 +13,7 @@ import type { WebhookQueueMessage } from '@/lib/webhooks'
 const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('contact:create'), email: z.email(), displayName: z.string().trim().max(100), blocked: z.boolean().default(false) }),
   z.object({ action: z.literal('contact:block'), id: z.string(), blocked: z.boolean() }),
+  z.object({ action: z.literal('contact:deliverable'), id: z.string() }),
   z.object({ action: z.literal('template:create'), name: z.string().trim().min(1).max(100), subject: z.string().max(998), textBody: z.string().max(100_000) }),
   z.object({ action: z.literal('event:create'), mailboxId: z.string().nullable(), title: z.string().trim().min(1).max(200), description: z.string().max(20_000), location: z.string().max(500), attendees: z.array(z.email()).max(100), startsAt: z.iso.datetime(), endsAt: z.iso.datetime() }),
   z.object({ action: z.literal('key:create'), name: z.string().trim().min(1).max(100), scopes: z.array(z.enum(['messages:read', 'messages:send'])).min(1) }),
@@ -49,6 +50,8 @@ export const Route = createFileRoute('/api/tools')({ server: { handlers: {
       await db.insert(contacts).values({ id: newId('con'), userId: session.user.id, email: input.email.toLowerCase(), displayName: input.displayName || null, source: 'manual', blocked: input.blocked }).onConflictDoUpdate({ target: [contacts.userId, contacts.email], set: { displayName: input.displayName || null, blocked: input.blocked } })
     } else if (input.action === 'contact:block') {
       await db.update(contacts).set({ blocked: input.blocked }).where(and(eq(contacts.id, input.id), eq(contacts.userId, session.user.id)))
+    } else if (input.action === 'contact:deliverable') {
+      await db.update(contacts).set({ undeliverableAt: null, undeliverableReason: null }).where(and(eq(contacts.id, input.id), eq(contacts.userId, session.user.id)))
     } else if (input.action === 'template:create') {
       await db.insert(emailTemplates).values({ id: newId('tpl'), userId: session.user.id, name: input.name, subject: input.subject, textBody: input.textBody })
     } else if (input.action === 'event:create') {

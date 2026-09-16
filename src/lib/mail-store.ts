@@ -14,6 +14,8 @@ export type MessageSummary = {
   starred: boolean
   snoozedUntil: string | null
   threadId: string | null
+  /** Why an outbound message bounced; absent on summaries cached before this was synced. */
+  deliveryError?: string | null
   createdAt: string
   updatedAt: string
 }

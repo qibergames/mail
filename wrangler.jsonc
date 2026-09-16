@@ -28,8 +28,14 @@
       "name": "LOGIN_RATE_LIMIT",
       "namespace_id": "1001",
       "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "AI_SPAM_RATE_LIMIT",
+      "namespace_id": "1002",
+      "simple": { "limit": 10, "period": 60 }
     }
   ],
+  "ai": { "binding": "AI", "remote": true },
   "send_email": [
     { "name": "EMAIL", "remote": true }
   ],
@@ -55,7 +61,8 @@
     ],
     "consumers": [
       { "queue": "qibermail-inbound", "max_batch_size": 5, "max_retries": 3 },
-      { "queue": "qibermail-outbound", "max_batch_size": 5, "max_retries": 3 }
+      { "queue": "qibermail-outbound", "max_batch_size": 5, "max_retries": 3 },
+      { "queue": "qibermail-email-events", "max_batch_size": 10, "max_retries": 3 }
     ]
   },
   "observability": { "enabled": true },

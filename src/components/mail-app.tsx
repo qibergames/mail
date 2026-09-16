@@ -570,6 +570,7 @@ function ThreadMessage({ message, expanded, single, onToggle, ownAddresses }: { 
   const text = loaded ? splitQuotedText(body.textBody ?? '') : null
   return <div className="py-2">
     <MessageHeader message={message} security={loaded ? body.security : null} open={detailsOpen} onToggle={() => setDetailsOpen((value) => !value)} ownAddresses={ownAddresses} onCollapse={single ? undefined : onToggle} />
+    {message.direction === 'outbound' && message.deliveryError && <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"><TriangleAlert className="mt-0.5 size-4 shrink-0" /><span><strong className="block font-semibold"><Trans id="This message could not be delivered." /></strong><span className="break-words text-xs">{message.deliveryError}</span></span></p>}
     {!loaded
       ? <div className="mt-6 grid place-items-center p-8 text-muted-foreground">{mailStore.offline ? <span className="flex items-center gap-2 text-sm"><CloudOff className="size-4" /><Trans id="This message is not available offline yet." /></span> : <LoaderCircle className="animate-spin" />}</div>
       : body.htmlBody

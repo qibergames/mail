@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { createImportBatches } from '@/lib/email/import-client'
 
 type ToolData = {
-  contacts: Array<{ id: string; email: string; displayName: string | null; blocked: boolean }>
+  contacts: Array<{ id: string; email: string; displayName: string | null; blocked: boolean; undeliverableAt: string | null; undeliverableReason: string | null }>
   templates: Array<{ id: string; name: string; subject: string; textBody: string }>
   events: Array<{ id: string; mailboxId: string | null; title: string; description: string; location: string; attendees: string; startsAt: string; endsAt: string }>
   apiKeys: Array<{ id: string; name: string; prefix: string; scopes: string; lastUsedAt: string | null }>
@@ -105,7 +105,8 @@ export function ToolsApp({ section }: { section: ToolsSection }) {
 
     {section === 'contacts' && <>
       {data.contacts.length > 0 && <div className="grid gap-2">
-        {data.contacts.map((contact) => <Row key={contact.id} icon={ContactRound} title={contact.displayName || contact.email} meta={contact.displayName ? contact.email : undefined} badges={contact.blocked && <Badge danger><Trans id="blocked" /></Badge>} actions={<>
+        {data.contacts.map((contact) => <Row key={contact.id} icon={ContactRound} title={contact.displayName || contact.email} meta={contact.displayName ? contact.email : undefined} extra={contact.undeliverableReason && <small className="block truncate text-red-600 dark:text-red-400" title={contact.undeliverableReason}>{contact.undeliverableReason}</small>} badges={<>{contact.blocked && <Badge danger><Trans id="blocked" /></Badge>}{contact.undeliverableAt && <Badge danger><Trans id="undeliverable" /></Badge>}</>} actions={<>
+          {contact.undeliverableAt && <Button size="sm" variant="outline" onClick={() => post({ action: 'contact:deliverable', id: contact.id })}><Trans id="Clear bounce" /></Button>}
           <Button size="sm" variant="outline" onClick={() => post({ action: 'contact:block', id: contact.id, blocked: !contact.blocked })}>{contact.blocked ? <Trans id="Unblock" /> : <Trans id="Block" />}</Button>
           <Edit onClick={() => setEditing({ kind: 'contact', id: contact.id })} />
           <Delete onClick={() => remove('contact', contact.id)} />

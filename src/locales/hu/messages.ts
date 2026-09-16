@@ -412,4 +412,8 @@ export const messages = {
   'Collapse message': 'Levél összecsukása',
   'The service worker did not start. Reload the page and try again.': 'A service worker nem indult el. Töltsd újra az oldalt, és próbáld újra.',
   'The browser\'s push service did not respond. Try again in a regular browser window.': 'A böngésző push szolgáltatása nem válaszolt. Próbáld újra egy normál böngészőablakban.',
+  'This message could not be delivered.': 'A levelet nem sikerült kézbesíteni.',
+  'Earlier mail to this address could not be delivered.': 'Erre a címre korábban nem sikerült levelet kézbesíteni.',
+  'undeliverable': 'nem kézbesíthető',
+  'Clear bounce': 'Hiba törlése',
 }
