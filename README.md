@@ -51,7 +51,7 @@ Put the Better Auth secret, canonical `BETTER_AUTH_URL`, matching VAPID key pair
 2. **Set the secrets** when prompted (or afterwards under *Workers → qibermail → Settings → Variables*): `BETTER_AUTH_SECRET` (`openssl rand -base64 48`), `BETTER_AUTH_URL` (the public HTTPS URL of the deployed app), `CF_TOKEN`, `VAPID_SUBJECT` (a `mailto:` address) and the `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` pair from `bunx web-push generate-vapid-keys`. `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are optional but recommended.
 3. **Complete setup.** Open the deployed URL and follow `/setup` to connect the first domain and create the administrator.
 
-`CF_TOKEN` is a runtime token used to provision Email Routing and Email Sending for the domains you connect; it needs **Zone Read**, **Email Routing Edit**, **Email Routing Rules Write** and **Email Sending Edit** on those zones. It is separate from the token Cloudflare uses to deploy the app.
+`CF_TOKEN` is a runtime token used to provision Email Routing and Email Sending for the domains you connect; it needs **Zone Read**, **Email Routing Edit**, **Email Routing Rules Write** and **Email Sending Edit** on those zones, plus account-level **Queues Edit** so QiberMail can subscribe the `qibermail-email-events` queue to the bounce and complaint events of each sending domain. Without that last permission everything else still works and sent mail is only marked undeliverable when the other server returns a delivery status notification. It is separate from the token Cloudflare uses to deploy the app.
 
 ## Manual Cloudflare deployment
 
@@ -62,6 +62,7 @@ bunx wrangler d1 create qibermail
 bunx wrangler r2 bucket create qibermail-raw
 bunx wrangler queues create qibermail-inbound
 bunx wrangler queues create qibermail-outbound
+bunx wrangler queues create qibermail-email-events
 ```
 
 Replace the placeholder `database_id` in `wrangler.jsonc`, verify that `CF_EMAIL_WORKER_NAME` matches the Worker name, then configure secrets:

@@ -4,7 +4,7 @@ import { env } from 'cloudflare:workers'
 import { getDb } from '@/db'
 import { auditLogs, domains, mailboxAliases, mailboxes, messages, outboundJobs, routingRules, users } from '@/db/schema'
 import { errorResponse, requireAdmin } from '@/lib/api-auth'
-import { enableSending, inspectDomain, repairMailboxRoutes } from '@/lib/cloudflare-api'
+import { enableSending, inspectDomain, repairMailboxRoutes, trySendingEventSubscription } from '@/lib/cloudflare-api'
 import { newId } from '@/lib/ids'
 
 async function loadDomain(domainId: string) {
@@ -84,6 +84,8 @@ async function syncDomain(request: Request, domainId: string) {
     const addresses = [...boxes, ...aliases].map((row) => `${row.localPart}@${domain.hostname}`)
     try { await repairMailboxRoutes(env, domain.zoneId, addresses) } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Cloudflare API request failed' }, { status: 502 }) }
   }
+  // Existing installs predate the subscription, so every sync makes sure it is there.
+  await trySendingEventSubscription(env, domain.zoneId, domain.hostname)
   const inspection = await inspectDomain(env, domain.zoneId, domain.hostname)
   if (!inspection.routing) return Response.json({ error: inspection.errors.join('; ') || 'Cloudflare API request failed' }, { status: 502 })
   const routingEnabled = inspection.routing.enabled

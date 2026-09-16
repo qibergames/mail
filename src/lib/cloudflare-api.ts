@@ -90,6 +90,7 @@ export async function provisionDomain(env: CloudflareEnv, rawHostname: string): 
     sendingEnabled = sending.enabled
     sendingCreated = !found
   }
+  await trySendingEventSubscription(env, zone.id, hostname)
 
   return {
     id: new URL(`https://${hostname}`).hostname,
@@ -295,6 +296,46 @@ async function markPresence(env: CloudflareEnv, zoneId: string, required: DnsRec
   }))
 }
 
+/**
+ * Bounce and complaint events are published per sending domain into the queue the worker consumes, so a
+ * self-hosted install gets delivery feedback without anyone wiring up a subscription by hand.
+ */
+const EMAIL_EVENT_QUEUE = 'qibermail-email-events'
+const EMAIL_EVENTS = ['message.bounced', 'message.complained', 'message.rejected', 'message.failed', 'message.delivered']
+
+type QueueSummary = { queue_id: string; queue_name: string }
+type EventSubscription = { id: string; source?: { type?: string; domain?: string } }
+
+export async function ensureSendingEventSubscription(env: CloudflareEnv, zoneId: string, hostname: string) {
+  const zone = await cfRequest<{ account?: { id?: string } }>(env, `/zones/${zoneId}`)
+  const accountId = zone.account?.id ?? env.CF_AID
+  if (!accountId) return 'unknown-account'
+  const queues = await cfRequest<Array<QueueSummary>>(env, `/accounts/${accountId}/queues?name=${encodeURIComponent(EMAIL_EVENT_QUEUE)}`)
+  const queue = queues.find((item) => item.queue_name === EMAIL_EVENT_QUEUE)
+  // Older deployments predate the queue; they keep working from delivery status notifications alone.
+  if (!queue) return 'no-queue'
+  const existing = await cfRequest<Array<EventSubscription>>(env, `/accounts/${accountId}/event_subscriptions/subscriptions?queue_id=${queue.queue_id}&per_page=100`)
+  if (existing.some((item) => item.source?.type === 'email.sending' && item.source.domain?.toLowerCase() === hostname.toLowerCase())) return 'exists'
+  await cfRequest<unknown>(env, `/accounts/${accountId}/event_subscriptions/subscriptions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `${EMAIL_EVENT_QUEUE} ${hostname}`,
+      enabled: true,
+      source: { type: 'email.sending', zone_id: zoneId, domain: hostname },
+      destination: { type: 'queues.queue', queue_id: queue.queue_id },
+      events: EMAIL_EVENTS,
+    }),
+  })
+  return 'created'
+}
+
+/** Subscribing needs an extra token permission, so a failure here never blocks provisioning. */
+export async function trySendingEventSubscription(env: CloudflareEnv, zoneId: string, hostname: string) {
+  return ensureSendingEventSubscription(env, zoneId, hostname)
+    .then((outcome) => { if (outcome !== 'exists') console.log('Email Sending event subscription', { hostname, outcome }); return outcome })
+    .catch((error) => { console.error('Email Sending event subscription failed', hostname, error); return 'failed' as const })
+}
+
 export async function getSendingSetup(env: CloudflareEnv, zoneId: string, hostname: string): Promise<SendingSetup> {
   const subdomains = await cfRequest<SendingSubdomain[]>(env, `/zones/${zoneId}/email/sending/subdomains`)
   const subdomain = subdomains.find((item) => item.name.toLowerCase() === hostname.toLowerCase()) ?? null
@@ -312,6 +353,7 @@ export async function enableSending(env: CloudflareEnv, zoneId: string, hostname
   if (!subdomain.enabled) {
     subdomain = await cfRequest<SendingSubdomain>(env, `/zones/${zoneId}/email/sending/subdomains/${subdomain.tag}`, { method: 'PATCH', body: JSON.stringify({ enabled: true }) }).catch(() => subdomain as SendingSubdomain)
   }
+  await trySendingEventSubscription(env, zoneId, hostname)
   const required = await requiredSendingRecords(env, zoneId, subdomain.tag).catch(() => [] as DnsRecord[])
   const records = await markPresence(env, zoneId, required)
   for (const record of records.filter((item) => !item.present)) {
