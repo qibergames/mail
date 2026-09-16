@@ -432,4 +432,7 @@ export const messages = {
   'Describe a rule': 'Írd le a szabályt',
   'Describe a rule, for example: file Stripe receipts into Accounting': 'Írd le a szabályt, például: a Stripe nyugtákat tedd a Könyvelés mappába',
   'Could not turn that into a rule. Fill the fields in below.': 'Ebből nem sikerült szabályt készíteni. Töltsd ki a mezőket alább.',
+  'Add to calendar': 'Hozzáadás a naptárhoz',
+  'Added to your calendar.': 'Hozzáadva a naptáradhoz.',
+  'No appointment found in this message.': 'Ebben a levélben nem találtam időpontot.',
 }

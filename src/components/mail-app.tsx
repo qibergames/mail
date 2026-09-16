@@ -2,6 +2,7 @@ import { Trans, useLingui } from '@lingui/react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   Archive,
+  CalendarPlus,
   ArrowLeft,
   CalendarClock,
   ChevronDown,
@@ -587,6 +588,8 @@ function ThreadMessage({ message, expanded, single, onToggle, ownAddresses }: { 
   }
 
   const loaded = body?.id === message.id
+  const insight = readInsight(message)
+  const invited = loaded && body.attachments.some((attachment) => attachment.contentType === 'text/calendar')
   const text = loaded ? splitQuotedText(body.textBody ?? '') : null
   return <div className="py-2">
     <MessageHeader message={message} security={loaded ? body.security : null} open={detailsOpen} onToggle={() => setDetailsOpen((value) => !value)} ownAddresses={ownAddresses} onCollapse={single ? undefined : onToggle} />
@@ -600,7 +603,24 @@ function ThreadMessage({ message, expanded, single, onToggle, ownAddresses }: { 
           <pre className="whitespace-pre-wrap break-words font-sans">{text?.visible || (text?.quoted ? '' : i18n._('This message has no plain-text body.'))}</pre>
           {text?.quoted && <details className="mt-3"><summary className="inline-block cursor-pointer list-none rounded-full bg-muted px-2.5 text-xs font-bold tracking-widest text-muted-foreground select-none">···</summary><pre className="mt-2 whitespace-pre-wrap break-words border-l-2 pl-3 font-sans text-muted-foreground">{text.quoted}</pre></details>}
         </div>}
+    {(invited || (insight?.meeting ?? 0) >= 0.6) && <AddToCalendar messageId={message.id} />}
     {loaded && body.attachments.length > 0 && <div className="mt-6 flex flex-wrap gap-2">{body.attachments.map((attachment) => <a key={attachment.id} className="rounded-md border px-3 py-2 text-sm hover:bg-muted" href={`/api/messages/${message.id}/attachments/${attachment.id}`}>{attachment.filename} · {(attachment.size / 1024).toFixed(0)} KB</a>)}</div>}
+  </div>
+}
+
+/** Offers the appointment a message proposes as a calendar entry. */
+function AddToCalendar({ messageId }: { messageId: string }) {
+  const { i18n } = useLingui()
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  if (state === 'saved') return <p className="mt-4 flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400"><CalendarPlus className="size-4" /><Trans id="Added to your calendar." /></p>
+  return <div className="mt-4 flex items-center gap-2">
+    <Button variant="outline" size="sm" disabled={state === 'saving'} onClick={() => {
+      setState('saving')
+      void fetch(`/api/messages/${encodeURIComponent(messageId)}/calendar`, { method: 'POST' })
+        .then((response) => setState(response.ok ? 'saved' : 'failed'))
+        .catch(() => setState('failed'))
+    }}>{state === 'saving' ? <LoaderCircle className="animate-spin" /> : <CalendarPlus />}<Trans id="Add to calendar" /></Button>
+    {state === 'failed' && <span className="text-xs text-muted-foreground">{i18n._('No appointment found in this message.')}</span>}
   </div>
 }
 

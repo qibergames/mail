@@ -432,4 +432,7 @@ export const messages = {
   'Describe a rule': 'Describe a rule',
   'Describe a rule, for example: file Stripe receipts into Accounting': 'Describe a rule, for example: file Stripe receipts into Accounting',
   'Could not turn that into a rule. Fill the fields in below.': 'Could not turn that into a rule. Fill the fields in below.',
+  'Add to calendar': 'Add to calendar',
+  'Added to your calendar.': 'Added to your calendar.',
+  'No appointment found in this message.': 'No appointment found in this message.',
 }
