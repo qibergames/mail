@@ -17,3 +17,5 @@ VITE_TURNSTILE_SITE_KEY=replace_with_turnstile_site_key
 VAPID_SUBJECT=mailto:admin@example.com
 VAPID_PUBLIC_KEY=replace_with_vapid_public_key
 VAPID_PRIVATE_KEY=replace_with_vapid_private_key
+# Optional: judgment model for inbox tabs, priority, rule drafting and search ranking
+TYPESAFE_API_KEY=""

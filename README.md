@@ -48,7 +48,7 @@ Put the Better Auth secret, canonical `BETTER_AUTH_URL`, matching VAPID key pair
 ## One-click deploy
 
 1. **Deploy the app.** Click **Deploy to Cloudflare** above and keep the Worker name `qibermail`. Cloudflare creates the D1 database, R2 bucket, queues, Durable Object and Workflow declared in `wrangler.jsonc` and runs the D1 migrations on deploy. Resources are only provisioned for you here, on the first deploy: if a later version adds a queue, create it once with `wrangler queues create <name>` before deploying, or the deploy fails with `Queue "<name>" does not exist`.
-2. **Set the secrets** when prompted (or afterwards under *Workers → qibermail → Settings → Variables*): `BETTER_AUTH_SECRET` (`openssl rand -base64 48`), `BETTER_AUTH_URL` (the public HTTPS URL of the deployed app), `CF_TOKEN`, `VAPID_SUBJECT` (a `mailto:` address) and the `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` pair from `bunx web-push generate-vapid-keys`. `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are optional but recommended.
+2. **Set the secrets** when prompted (or afterwards under *Workers → qibermail → Settings → Variables*): `BETTER_AUTH_SECRET` (`openssl rand -base64 48`), `BETTER_AUTH_URL` (the public HTTPS URL of the deployed app), `CF_TOKEN`, `VAPID_SUBJECT` (a `mailto:` address) and the `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` pair from `bunx web-push generate-vapid-keys`. `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are optional but recommended. `TYPESAFE_API_KEY` is optional too: with it, QiberMail asks a [TypeSafe](https://typesafe.ai) judgment model one question set per inbound message and uses the answers to sort the inbox into tabs, decide what is worth a push notification, weigh the spam score, surface a one-time login code and flag deceptive requests; it also drafts inbox rules from a sentence, ranks phrase searches and reads the appointment out of a message. Without it the inbox stays a single list and spam filtering falls back to Workers AI.
 3. **Complete setup.** Open the deployed URL and follow `/setup` to connect the first domain and create the administrator.
 
 `CF_TOKEN` is a runtime token QiberMail uses to provision Cloudflare for the domains you connect. It is separate from the token Cloudflare uses to deploy the app, and it needs these permissions:
@@ -86,6 +86,7 @@ bunx wrangler secret put TURNSTILE_SECRET_KEY
 bunx wrangler secret put VAPID_SUBJECT
 bunx wrangler secret put VAPID_PUBLIC_KEY
 bunx wrangler secret put VAPID_PRIVATE_KEY
+bunx wrangler secret put TYPESAFE_API_KEY
 ```
 
 `CF_TOKEN` needs the permissions listed under [One-click deploy](#one-click-deploy). The public `VITE_TURNSTILE_SITE_KEY` is read from the Worker binding at runtime.
