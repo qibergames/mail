@@ -6,6 +6,7 @@ import { queueOutboundEmail } from '@/lib/email/outbound'
 
 const sendSchema = z.object({
   mailboxId: z.string().min(1),
+  aliasId: z.string().optional(),
   to: z.email(),
   subject: z.string().max(998).default(''),
   text: z.string().max(2_000_000).default(''),

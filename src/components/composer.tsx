@@ -6,8 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { mailStore } from '@/lib/mail-store'
 import { cn } from '@/lib/utils'
 
-export type Draft = { id?: string; to?: string; subject?: string; text?: string; replyTo?: string }
-type ComposerMailbox = { id: string; address: string; name: string | null }
+export type Draft = { id?: string; to?: string; subject?: string; text?: string; replyTo?: string; fromAddress?: string }
+type ComposerMailbox = { id: string; address: string; name: string | null; aliases?: Array<{ id: string; address: string }> }
+/** One entry of the From list: a mailbox, or one of its aliases. */
+type Identity = { key: string; mailboxId: string; aliasId?: string; address: string; name: string | null }
 type Template = { id: string; name: string; subject: string; textBody: string }
 
 function formatSize(bytes: number) {
@@ -23,7 +25,13 @@ async function encodeFile(file: File) {
 
 export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailboxes: Array<ComposerMailbox>; mailboxId: string; draft: Draft; close: () => void; sent: () => void }) {
   const { i18n } = useLingui()
-  const [from, setFrom] = useState(mailboxId)
+  // A mailbox and each of its aliases are separate identities to pick from; the key carries both ids.
+  const identities: Array<Identity> = mailboxes.length ? mailboxes.flatMap((item) => [
+    { key: item.id, mailboxId: item.id, address: item.address, name: item.name },
+    ...(item.aliases ?? []).map((alias) => ({ key: `${item.id}:${alias.id}`, mailboxId: item.id, aliasId: alias.id, address: alias.address, name: item.name })),
+  ]) : [{ key: mailboxId, mailboxId, address: '', name: null }]
+  const [from, setFrom] = useState(() => identities.find((item) => item.address === draft.fromAddress?.toLowerCase())?.key ?? mailboxId)
+  const identity = identities.find((item) => item.key === from) ?? identities.find((item) => item.mailboxId === mailboxId) ?? identities[0]
   const [to, setTo] = useState(draft.to ?? '')
   const [subject, setSubject] = useState(draft.subject ?? '')
   const [text, setText] = useState(draft.text ?? '')
@@ -56,9 +64,9 @@ export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailbox
 
   useEffect(() => {
     if (!dirty.current) return
-    const timer = setTimeout(() => { void saveDraft({ to, subject, text, mailboxId: from }) }, 800)
+    const timer = setTimeout(() => { void saveDraft({ to, subject, text, mailboxId: identity.mailboxId }) }, 800)
     return () => clearTimeout(timer)
-  }, [to, subject, text, from])
+  }, [to, subject, text, identity.mailboxId])
 
   function edit<T>(setter: (value: T) => void) {
     return (value: T) => { dirty.current = true; setter(value) }
@@ -80,7 +88,7 @@ export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailbox
     const response = await fetch('/api/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mailboxId: from, draftId: draftId.current, inReplyTo: draft.replyTo, to, subject, text, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined, attachments }),
+      body: JSON.stringify({ mailboxId: identity.mailboxId, aliasId: identity.aliasId, draftId: draftId.current, inReplyTo: draft.replyTo, to, subject, text, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined, attachments }),
     })
     setSending(false)
     if (!response.ok) {
@@ -90,7 +98,7 @@ export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailbox
     sent()
   }
 
-  const mailbox = mailboxes.find((item) => item.id === from)
+  const mailbox = identity
   const bounceReason = undeliverable.get(to.trim().replace(/^.*<([^>]+)>.*$/, '$1').toLowerCase())
   const title = subject || i18n._('New message')
   const minimized = layout === 'minimized'
@@ -124,12 +132,12 @@ export function Composer({ mailboxes, mailboxId, draft, close, sent }: { mailbox
         <div className="shrink-0 divide-y px-4 text-sm">
           <div className="flex h-10 items-center gap-3">
             <span className="w-14 shrink-0 text-muted-foreground"><Trans id="From" /></span>
-            {mailboxes.length > 1
-              ? <Select value={from} onValueChange={edit(setFrom)}>
+            {identities.length > 1
+              ? <Select value={identity.key} onValueChange={edit(setFrom)}>
                 <SelectTrigger aria-label={i18n._('From')} className="h-8 min-w-0 flex-1 justify-start rounded-md border-0 bg-transparent px-2 shadow-none hover:bg-muted [&>span]:truncate"><SelectValue /></SelectTrigger>
-                <SelectContent align="start">{mailboxes.map((item) => <SelectItem key={item.id} value={item.id}><span className="font-medium">{item.name || item.address}</span>{item.name && <span className="ml-2 text-muted-foreground">{item.address}</span>}</SelectItem>)}</SelectContent>
+                <SelectContent align="start">{identities.map((item) => <SelectItem key={item.key} value={item.key}><span className="font-medium">{item.name || item.address}</span>{item.name && <span className="ml-2 text-muted-foreground">{item.address}</span>}</SelectItem>)}</SelectContent>
               </Select>
-              : <span className="truncate">{mailbox?.name ? `${mailbox.name} <${mailbox.address}>` : mailbox?.address ?? '—'}</span>}
+              : <span className="truncate">{mailbox.name ? `${mailbox.name} <${mailbox.address}>` : mailbox.address || '—'}</span>}
           </div>
           <label className="flex h-10 items-center gap-3">
             <span className="w-14 shrink-0 text-muted-foreground"><Trans id="To" /></span>

@@ -52,7 +52,7 @@ const categoryLabels: Record<MailCategory, string> = { primary: 'Primary', promo
 
 export type MailView = 'inbox' | 'sent' | 'drafts' | 'starred' | 'snoozed' | 'archived' | 'spam' | 'trash'
 
-type Mailbox = { id: string; name: string | null; address: string; type: string }
+type Mailbox = { id: string; name: string | null; address: string; type: string; aliases?: Array<{ id: string; address: string }> }
 type Folder = { id: string; mailboxId: string; name: string; color: string }
 type Message = MessageSummary
 type Attachment = { id: string; filename: string; contentType: string; size: number; contentId: string | null }
@@ -211,6 +211,8 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
 
   useEffect(() => { if (refresh) void mailStore.sync() }, [refresh])
 
+  // An alias is one of our own addresses too, so mail sent to it still reads as "me".
+  const ownAddresses = useMemo(() => mailboxes.flatMap((mailbox) => [mailbox.address, ...(mailbox.aliases ?? []).map((alias) => alias.address)]), [mailboxes])
   const localMessages = useMemo(() => mailboxId ? mailStore.select(view, mailboxId, folderId) : [], [storeVersion, view, mailboxId, folderId])
   const found = search && searchResults ? searchResults : localMessages
   const loading = search ? searching : !mailStore.ready
@@ -360,7 +362,9 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
     if (!latest) return
     const quoted = quoteForReply({ fromAddr: latest.fromAddr, createdAt: latest.createdAt, textBody: await bodyText(latest.id) }, i18n.locale)
     const subject = latest.subject ?? ''
-    if (mode === 'reply') setComposer({ to: latest.direction === 'outbound' ? latest.toAddr : recipient(latest.fromAddr), subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`, text: quoted, replyTo: latest.id })
+    // Reply from the address the message reached, so a conversation on an alias stays on that alias.
+    const fromAddress = latest.direction === 'outbound' ? recipient(latest.fromAddr) : recipient(latest.toAddr)
+    if (mode === 'reply') setComposer({ to: latest.direction === 'outbound' ? latest.toAddr : recipient(latest.fromAddr), subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`, text: quoted, replyTo: latest.id, fromAddress })
     else setComposer({ subject: /^fwd?:/i.test(subject) ? subject : `Fwd: ${subject}`, text: quoted })
   }
 
@@ -519,7 +523,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                 <article className="mx-auto w-full min-w-0 max-w-6xl p-4 md:p-6 lg:px-8">
                   <h2 className="flex items-start gap-2 text-xl font-semibold break-words sm:text-2xl">{conversation.latest.subject || i18n._('(No subject)')}{conversation.count > 1 && <span className="mt-1.5 shrink-0 rounded-full bg-muted px-2 text-xs font-medium tabular-nums text-muted-foreground">{conversation.count}</span>}</h2>
                   <div className="mt-2 divide-y">
-                    {conversation.messages.map((message) => <ThreadMessage key={message.id} message={message} expanded={expandedIds.has(message.id) || conversation.count === 1} single={conversation.count === 1} onToggle={() => toggleExpanded(message.id)} ownAddresses={mailboxes.map((mailbox) => mailbox.address)} />)}
+                    {conversation.messages.map((message) => <ThreadMessage key={message.id} message={message} expanded={expandedIds.has(message.id) || conversation.count === 1} single={conversation.count === 1} onToggle={() => toggleExpanded(message.id)} ownAddresses={ownAddresses} />)}
                   </div>
                 </article>
                 </>

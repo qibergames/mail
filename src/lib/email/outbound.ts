@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull, lte } from 'drizzle-orm'
 import { getDb } from '@/db'
-import { contacts, domains, mailboxAccess, mailboxes, messageAttachments, messages, outboundJobs, users } from '@/db/schema'
+import { contacts, domains, mailboxAccess, mailboxAliases, mailboxes, messageAttachments, messages, outboundJobs, users } from '@/db/schema'
 import type { Attachment } from './attachments'
 import { storeAttachments } from './attachments'
 import { formatAddress, parseAddress } from './address'
@@ -32,7 +32,7 @@ export async function accessibleMailboxIds(userId: string) {
 export async function queueOutboundEmail(
   env: CloudflareEnv,
   userId: string,
-  input: { mailboxId: string; to: string; subject: string; text: string; html?: string; attachments?: Array<Attachment>; scheduledAt?: Date; draftId?: string; inReplyTo?: string },
+  input: { mailboxId: string; aliasId?: string; to: string; subject: string; text: string; html?: string; attachments?: Array<Attachment>; scheduledAt?: Date; draftId?: string; inReplyTo?: string },
 ) {
   if (!parseAddress(input.to)) throw new Error('Invalid recipient address')
   if (input.subject.length > 998) throw new Error('Subject is too long')
@@ -54,7 +54,18 @@ export async function queueOutboundEmail(
   if (!owner && !access) throw new Error('Mailbox access denied')
   if (access?.permission === 'read_only') throw new Error('This mailbox is read-only')
 
-  const address = `${mailbox.mailbox.localPart}@${mailbox.hostname}`
+  // Sending from an alias is the same mailbox wearing another of its addresses.
+  const alias = input.aliasId
+    ? (await db
+        .select({ localPart: mailboxAliases.localPart, hostname: domains.hostname, sendingEnabled: domains.sendingEnabled })
+        .from(mailboxAliases)
+        .innerJoin(domains, eq(mailboxAliases.domainId, domains.id))
+        .where(and(eq(mailboxAliases.id, input.aliasId), eq(mailboxAliases.mailboxId, input.mailboxId)))
+        .limit(1)).at(0)
+    : undefined
+  if (input.aliasId && !alias) throw new Error('Alias not found')
+  if (alias && !alias.sendingEnabled) throw new Error(`Email sending is not set up for ${alias.hostname}`)
+  const address = alias ? `${alias.localPart}@${alias.hostname}` : `${mailbox.mailbox.localPart}@${mailbox.hostname}`
   const actor = access?.permission === 'send_on_behalf'
     ? (await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1)).at(0)
     : null
