@@ -16,28 +16,26 @@ import {
   LockKeyholeOpen,
   CloudOff,
   ChevronUp,
-  LogOut,
   Mail,
   MailOpen,
   Menu,
   MoonStar,
   Search,
   Send,
-  Settings,
   ShieldAlert,
   Star,
   Trash2,
   TriangleAlert,
-  Wrench,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Composer } from './composer'
+import { UserMenu } from './user-menu'
 import type { Draft } from './composer'
 import { Button } from './ui/button'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from './ui/context-menu'
 import { Input } from './ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { checkForUpdate } from '@/lib/app-update'
 import { authClient } from '@/lib/auth-client'
 import { resolveInlineImages } from '@/lib/email/html'
 import type { SecurityDetails } from '@/lib/email/security'
@@ -279,6 +277,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
       const socket = new WebSocket(`${protocol}//${location.host}/api/realtime`)
       state.socket = socket
       socket.onopen = () => {
+        if (state.attempts > 0) void checkForUpdate({ force: true })
         state.attempts = 0
         void mailStore.sync()
         state.ping = setInterval(() => { if (socket.readyState === WebSocket.OPEN) socket.send('ping') }, 25_000)
@@ -425,19 +424,8 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
             ))}
           </nav>
           {folders.some((folder) => folder.mailboxId === mailboxId) && <nav className="grid gap-1 border-t pt-3" aria-label={i18n._('Custom folders')}>{folders.filter((folder) => folder.mailboxId === mailboxId).map((folder) => <Button key={folder.id} asChild variant={folder.id === folderId ? 'secondary' : 'ghost'} className="justify-start rounded-full"><Link to="/folders/$folderId" params={{ folderId: folder.id }}><span className="size-2 rounded-full" style={{ backgroundColor: folder.color }} />{folder.name}</Link></Button>)}</nav>}
-          <div className="mt-auto grid gap-3">
-            <Select value={mailboxId} onValueChange={switchMailbox}>
-              <SelectTrigger aria-label={i18n._('Mailbox')} className="h-10 w-full rounded-xl bg-background/60 shadow-none">
-                <SelectValue placeholder={i18n._('Mailbox')} />
-              </SelectTrigger>
-              <SelectContent>
-                {mailboxes.map((mailbox) => <SelectItem key={mailbox.id} value={mailbox.id}>{mailbox.name || mailbox.address}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Button asChild variant="ghost" className="justify-start"><Link to="/settings/$section" params={{ section: 'profile' }}><Settings /><Trans id="Settings" /></Link></Button>
-            <Button asChild variant="ghost" className="justify-start"><Link to="/tools/$section" params={{ section: 'contacts' }}><Wrench /><Trans id="Tools" /></Link></Button>
-            {session?.user.role === 'admin' && <Button asChild variant="ghost" className="justify-start"><Link to="/admin/$section" params={{ section: 'accounts' }}><ShieldAlert /><Trans id="Administration" /></Link></Button>}
-            <Button variant="ghost" className="justify-start" onClick={logout}><LogOut /><Trans id="Sign out" /></Button>
+          <div className="mt-auto">
+            <UserMenu user={session?.user} mailboxes={mailboxes} mailboxId={mailboxId} onSwitchMailbox={switchMailbox} onSignOut={logout} />
           </div>
         </aside>
 

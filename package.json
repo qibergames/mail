@@ -24,6 +24,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
+    "@base-ui/react": "^1.8.0",
     "@lingui/core": "latest",
     "@lingui/react": "latest",
     "@radix-ui/react-context-menu": "^2.3.7",
