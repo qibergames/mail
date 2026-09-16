@@ -47,7 +47,7 @@ Put the Better Auth secret, canonical `BETTER_AUTH_URL`, matching VAPID key pair
 
 ## One-click deploy
 
-1. **Deploy the app.** Click **Deploy to Cloudflare** above and keep the Worker name `qibermail`. Cloudflare creates the D1 database, R2 bucket, queues, Durable Object and Workflow declared in `wrangler.jsonc` and runs the D1 migrations on deploy.
+1. **Deploy the app.** Click **Deploy to Cloudflare** above and keep the Worker name `qibermail`. Cloudflare creates the D1 database, R2 bucket, queues, Durable Object and Workflow declared in `wrangler.jsonc` and runs the D1 migrations on deploy. Resources are only provisioned for you here, on the first deploy: if a later version adds a queue, create it once with `wrangler queues create <name>` before deploying, or the deploy fails with `Queue "<name>" does not exist`.
 2. **Set the secrets** when prompted (or afterwards under *Workers → qibermail → Settings → Variables*): `BETTER_AUTH_SECRET` (`openssl rand -base64 48`), `BETTER_AUTH_URL` (the public HTTPS URL of the deployed app), `CF_TOKEN`, `VAPID_SUBJECT` (a `mailto:` address) and the `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` pair from `bunx web-push generate-vapid-keys`. `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are optional but recommended.
 3. **Complete setup.** Open the deployed URL and follow `/setup` to connect the first domain and create the administrator.
 
