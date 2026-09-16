@@ -51,7 +51,17 @@ Put the Better Auth secret, canonical `BETTER_AUTH_URL`, matching VAPID key pair
 2. **Set the secrets** when prompted (or afterwards under *Workers → qibermail → Settings → Variables*): `BETTER_AUTH_SECRET` (`openssl rand -base64 48`), `BETTER_AUTH_URL` (the public HTTPS URL of the deployed app), `CF_TOKEN`, `VAPID_SUBJECT` (a `mailto:` address) and the `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` pair from `bunx web-push generate-vapid-keys`. `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are optional but recommended.
 3. **Complete setup.** Open the deployed URL and follow `/setup` to connect the first domain and create the administrator.
 
-`CF_TOKEN` is a runtime token used to provision Email Routing and Email Sending for the domains you connect; it needs **Zone Read**, **Email Routing Edit**, **Email Routing Rules Write** and **Email Sending Edit** on those zones, plus account-level **Queues Edit** so QiberMail can subscribe the `qibermail-email-events` queue to the bounce and complaint events of each sending domain. Without that last permission everything else still works and sent mail is only marked undeliverable when the other server returns a delivery status notification. It is separate from the token Cloudflare uses to deploy the app.
+`CF_TOKEN` is a runtime token QiberMail uses to provision Cloudflare for the domains you connect. It is separate from the token Cloudflare uses to deploy the app, and it needs these permissions:
+
+| Permission | Scope | Used for |
+| --- | --- | --- |
+| Zone → Read | the mail zones | finding the zone for a domain and its account |
+| Email Routing Rules → Edit | the mail zones | enabling routing, the per-address rules and the catch-all route to the Worker |
+| Email Sending → Edit | the mail zones | onboarding the sending domain |
+| DNS → Edit | the mail zones | writing the `cf-bounce` MX, SPF, DKIM and DMARC records that Email Sending requires |
+| Queues → Edit | account | subscribing the `qibermail-email-events` queue to each sending domain's bounce and complaint events |
+
+The first three are needed to connect a domain at all. Without **DNS → Edit** the domain connects but *Enable sending* cannot write the records, so you would have to add them by hand from the domain page. Without **Queues → Edit** everything else works and a sent message is only marked undeliverable when the receiving server returns a delivery status notification.
 
 ## Manual Cloudflare deployment
 
@@ -78,7 +88,7 @@ bunx wrangler secret put VAPID_PUBLIC_KEY
 bunx wrangler secret put VAPID_PRIVATE_KEY
 ```
 
-`CF_TOKEN` needs Zone Read plus Email Routing DNS/Rules and Email Sending edit permissions for the zones QiberMail manages. The public `VITE_TURNSTILE_SITE_KEY` is read from the Worker binding at runtime.
+`CF_TOKEN` needs the permissions listed under [One-click deploy](#one-click-deploy). The public `VITE_TURNSTILE_SITE_KEY` is read from the Worker binding at runtime.
 
 Build, apply the remote schema, and deploy:
 
