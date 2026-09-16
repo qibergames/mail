@@ -420,4 +420,12 @@ export const messages = {
   'Mail and events that failed every retry. Retry one after fixing the cause.': 'Mail and events that failed every retry. Retry one after fixing the cause.',
   'Attempts': 'Attempts',
   'Retry': 'Retry',
+  'Categories': 'Categories',
+  'Primary': 'Primary',
+  'Promotions': 'Promotions',
+  'Updates': 'Updates',
+  'Social': 'Social',
+  'Forums': 'Forums',
+  'This message asks for credentials or payment in a way that looks deceptive.': 'This message asks for credentials or payment in a way that looks deceptive.',
+  'Check the sender address before you act on it.': 'Check the sender address before you act on it.',
 }

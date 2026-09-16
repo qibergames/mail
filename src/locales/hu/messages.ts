@@ -420,4 +420,12 @@ export const messages = {
   'Mail and events that failed every retry. Retry one after fixing the cause.': 'Levelek és események, amelyek minden újrapróbálkozás után is hibára futottak. Az ok elhárítása után újrapróbálhatók.',
   'Attempts': 'Próbálkozások',
   'Retry': 'Újra',
+  'Categories': 'Kategóriák',
+  'Primary': 'Elsődleges',
+  'Promotions': 'Promóciók',
+  'Updates': 'Értesítések',
+  'Social': 'Közösségi',
+  'Forums': 'Fórumok',
+  'This message asks for credentials or payment in a way that looks deceptive.': 'Ez a levél megtévesztő módon kér belépési adatot vagy fizetést.',
+  'Check the sender address before you act on it.': 'Ellenőrizd a feladó címét, mielőtt bármit tennél.',
 }

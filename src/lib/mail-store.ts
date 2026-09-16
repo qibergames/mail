@@ -1,4 +1,5 @@
 import type { MailView } from '@/components/mail-app'
+import type { MailCategory } from '@/lib/email/typesafe'
 
 export type MessageSummary = {
   id: string
@@ -16,6 +17,10 @@ export type MessageSummary = {
   threadId: string | null
   /** Why an outbound message bounced; absent on summaries cached before this was synced. */
   deliveryError?: string | null
+  /** Inbox tab, attention level and smaller findings; absent until a message has been judged. */
+  category?: MailCategory | null
+  importance?: number | null
+  insight?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -328,6 +333,20 @@ class MailStore {
       transaction.objectStore('meta').put({ key, value })
       await transactionDone(transaction)
     } catch { /* cache only */ }
+  }
+}
+
+export type MessageInsight = { loginCode?: string; phishing?: number; expectsReply?: number; meeting?: number }
+
+/** Mail judged before categories existed, or judged as uncategorisable, belongs on the main tab. */
+export const categoryOf = (message: MessageSummary): MailCategory => message.category ?? 'primary'
+
+export function readInsight(message: MessageSummary): MessageInsight | null {
+  if (!message.insight) return null
+  try {
+    return JSON.parse(message.insight) as MessageInsight
+  } catch {
+    return null
   }
 }
 

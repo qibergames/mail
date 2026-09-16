@@ -41,11 +41,15 @@ import { authClient } from '@/lib/auth-client'
 import { resolveInlineImages } from '@/lib/email/html'
 import type { SecurityDetails } from '@/lib/email/security'
 import { clampMessageListWidth } from '@/lib/mail-layout'
-import { mailStore } from '@/lib/mail-store'
+import { categoryOf, mailStore, readInsight } from '@/lib/mail-store'
 import type { CachedBody, MessageSummary } from '@/lib/mail-store'
 import { groupThreads } from '@/lib/email/threads'
+import { MAIL_CATEGORIES } from '@/lib/email/typesafe'
+import type { MailCategory } from '@/lib/email/typesafe'
 import { QUOTE_STYLE, collapseQuotedHtml, quoteForReply, splitQuotedText } from '@/lib/email/quote'
 import { cn } from '@/lib/utils'
+
+const categoryLabels: Record<MailCategory, string> = { primary: 'Primary', promotions: 'Promotions', updates: 'Updates', social: 'Social', forums: 'Forums' }
 
 export type MailView = 'inbox' | 'sent' | 'drafts' | 'starred' | 'snoozed' | 'archived' | 'spam' | 'trash'
 
@@ -133,6 +137,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   const storeVersion = useSyncExternalStore(mailStore.subscribe, mailStore.getVersion, () => 0)
   const [searchResults, setSearchResults] = useState<Array<Message> | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(() => (typeof window === 'undefined' ? null : initialSelectedMessage()))
+  const [tab, setTab] = useState<MailCategory>('primary')
   const [selectedIds, setSelectedIds] = useState<Array<string>>([])
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
@@ -208,9 +213,18 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
   useEffect(() => { if (refresh) void mailStore.sync() }, [refresh])
 
   const localMessages = useMemo(() => mailboxId ? mailStore.select(view, mailboxId, folderId) : [], [storeVersion, view, mailboxId, folderId])
-  const messages = search && searchResults ? searchResults : localMessages
+  const found = search && searchResults ? searchResults : localMessages
   const loading = search ? searching : !mailStore.ready
+  // Tabs appear only once something has actually been categorised, so an install without a judgment model
+  // keeps a single plain inbox. Mail judged before categories existed counts as primary.
+  const tabbed = view === 'inbox' && !folderId && !search && localMessages.some((message) => message.category)
+  const messages = useMemo(() => tabbed ? found.filter((message) => categoryOf(message) === tab) : found, [found, tab, tabbed])
   const threads = useMemo(() => groupThreads(messages), [messages])
+  const tabUnread = useMemo(() => {
+    const counts = new Map<MailCategory, number>()
+    for (const message of localMessages) if (!message.read) counts.set(categoryOf(message), (counts.get(categoryOf(message)) ?? 0) + 1)
+    return counts
+  }, [localMessages])
   // The open conversation spans every view of the mailbox (inbox + sent replies), except trash/spam/drafts
   // unless the selected message itself lives there.
   const conversation = useMemo(() => {
@@ -440,6 +454,12 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
               <div className="flex h-14 shrink-0 items-center gap-1 border-b px-4">
                 {selectedIds.length ? <><span className="mr-2 text-sm">{selectedIds.length}</span><Button variant="ghost" size="icon" onClick={() => bulk({ read: true })} aria-label={i18n._('Mark read')} title={i18n._('Mark read')}><Mail /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'archived' })} aria-label={i18n._('Archive')} title={i18n._('Archive')}><Archive /></Button><Button variant="ghost" size="icon" onClick={() => bulk({ status: 'trash' })} aria-label={i18n._('Delete')} title={i18n._('Delete')}><Trash2 /></Button></> : <><h1 className="font-semibold">{folderId ? folders.find((folder) => folder.id === folderId)?.name : <Trans id={navigation.find((item) => item.view === view)?.label ?? 'Inbox'} />}</h1><span className="ml-auto text-sm text-muted-foreground">{threads.length}</span></>}
               </div>
+              {tabbed && <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b px-2" role="tablist" aria-label={i18n._('Categories')}>
+                {MAIL_CATEGORIES.map((name) => <button key={name} type="button" role="tab" aria-selected={tab === name} onClick={() => setTab(name)} className={cn('flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm whitespace-nowrap', tab === name ? 'border-primary font-semibold text-primary' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+                  <Trans id={categoryLabels[name]} />
+                  {(tabUnread.get(name) ?? 0) > 0 && <span className="rounded-full bg-primary/15 px-1.5 text-[11px] font-medium tabular-nums text-primary">{tabUnread.get(name)}</span>}
+                </button>)}
+              </div>}
               <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto">
                 {loading && <div className="grid place-items-center p-12"><LoaderCircle className="animate-spin" /></div>}
                 {!loading && messages.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground"><Trans id="No messages here." /></p>}
@@ -455,7 +475,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                     const who = view === 'sent' ? senderParts(latest.toAddr).name : names.join(', ')
                     return <ContextMenu key={thread.id}>
                       <ContextMenuTrigger asChild>
-                        <div data-index={row.index} ref={rowVirtualizer.measureElement} style={{ transform: `translateY(${row.start}px)` }} className={cn('absolute inset-x-0 top-0 flex border-b border-l-4 border-l-transparent hover:bg-muted/70', thread.unread && 'border-l-primary bg-primary/10', open && 'bg-secondary')}><label className="grid w-11 shrink-0 place-items-center"><input type="checkbox" checked={checked} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id)))} aria-label={i18n._('Select')} /></label><button type="button" onClick={() => selectMessage(latest)} className={cn('grid min-w-0 flex-1 gap-2 p-4 pl-0 text-left', wide ? 'grid-cols-[1fr_auto] md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] md:items-center md:gap-4 md:py-3' : 'grid-cols-[1fr_auto]')}><span className="sr-only">{thread.unread ? i18n._('Unread') : i18n._('Read')}</span><span className={cn('flex min-w-0 items-center gap-1.5 text-sm', thread.unread ? 'font-semibold' : 'text-muted-foreground')}><span className="truncate">{who}</span>{thread.count > 1 && <span className="shrink-0 rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">{thread.count}</span>}{thread.starred && <Star className="size-3.5 shrink-0 fill-yellow-400 text-yellow-500" />}</span>{wide && <span className={cn('hidden min-w-0 truncate text-sm md:block', thread.unread ? '' : 'text-muted-foreground')}><span className={cn(thread.unread && 'font-semibold', 'text-foreground')}>{latest.subject || i18n._('(No subject)')}</span>{latest.snippet && <span className="text-muted-foreground"> — {latest.snippet}</span>}</span>}<span className={cn('text-xs', thread.unread ? 'font-semibold' : 'text-muted-foreground', wide && 'md:col-start-3 md:row-start-1')}>{new Date(latest.createdAt).toLocaleDateString(i18n.locale)}</span><span className={cn('col-span-2 min-w-0', wide && 'md:hidden')}><span className={cn('mt-1 block truncate text-sm', thread.unread ? 'font-semibold' : 'text-muted-foreground')}>{latest.subject || i18n._('(No subject)')}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{latest.snippet}</span></span></button></div>
+                        <div data-index={row.index} ref={rowVirtualizer.measureElement} style={{ transform: `translateY(${row.start}px)` }} className={cn('absolute inset-x-0 top-0 flex border-b border-l-4 border-l-transparent hover:bg-muted/70', thread.unread && 'border-l-primary bg-primary/10', open && 'bg-secondary')}><label className="grid w-11 shrink-0 place-items-center"><input type="checkbox" checked={checked} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id)))} aria-label={i18n._('Select')} /></label><button type="button" onClick={() => selectMessage(latest)} className={cn('grid min-w-0 flex-1 gap-2 p-4 pl-0 text-left', wide ? 'grid-cols-[1fr_auto] md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] md:items-center md:gap-4 md:py-3' : 'grid-cols-[1fr_auto]')}><span className="sr-only">{thread.unread ? i18n._('Unread') : i18n._('Read')}</span><span className={cn('flex min-w-0 items-center gap-1.5 text-sm', thread.unread ? 'font-semibold' : 'text-muted-foreground')}><span className="truncate">{who}</span>{thread.count > 1 && <span className="shrink-0 rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">{thread.count}</span>}{thread.starred && <Star className="size-3.5 shrink-0 fill-yellow-400 text-yellow-500" />}</span>{wide && <span className={cn('hidden min-w-0 truncate text-sm md:block', thread.unread ? '' : 'text-muted-foreground')}><span className={cn(thread.unread && 'font-semibold', 'text-foreground')}>{latest.subject || i18n._('(No subject)')}</span>{readInsight(latest)?.loginCode && <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs font-semibold tracking-wider text-foreground">{readInsight(latest)?.loginCode}</span>}{latest.snippet && <span className="text-muted-foreground"> — {latest.snippet}</span>}</span>}<span className={cn('text-xs', thread.unread ? 'font-semibold' : 'text-muted-foreground', wide && 'md:col-start-3 md:row-start-1')}>{new Date(latest.createdAt).toLocaleDateString(i18n.locale)}</span><span className={cn('col-span-2 min-w-0', wide && 'md:hidden')}><span className={cn('mt-1 block truncate text-sm', thread.unread ? 'font-semibold' : 'text-muted-foreground')}>{latest.subject || i18n._('(No subject)')}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{latest.snippet}</span></span></button></div>
                       </ContextMenuTrigger>
                       <ContextMenuContent>
                         <ContextMenuItem onSelect={() => mailStore.update(ids, { read: thread.unread })}>{thread.unread ? <><MailOpen /><Trans id="Mark read" /></> : <><Mail /><Trans id="Mark unread" /></>}</ContextMenuItem>
@@ -570,6 +590,7 @@ function ThreadMessage({ message, expanded, single, onToggle, ownAddresses }: { 
   const text = loaded ? splitQuotedText(body.textBody ?? '') : null
   return <div className="py-2">
     <MessageHeader message={message} security={loaded ? body.security : null} open={detailsOpen} onToggle={() => setDetailsOpen((value) => !value)} ownAddresses={ownAddresses} onCollapse={single ? undefined : onToggle} />
+    {(readInsight(message)?.phishing ?? 0) >= 0.7 && <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"><TriangleAlert className="mt-0.5 size-4 shrink-0" /><span><strong className="block font-semibold"><Trans id="This message asks for credentials or payment in a way that looks deceptive." /></strong><span className="text-xs"><Trans id="Check the sender address before you act on it." /></span></span></p>}
     {message.direction === 'outbound' && message.deliveryError && <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"><TriangleAlert className="mt-0.5 size-4 shrink-0" /><span><strong className="block font-semibold"><Trans id="This message could not be delivered." /></strong><span className="break-words text-xs">{message.deliveryError}</span></span></p>}
     {!loaded
       ? <div className="mt-6 grid place-items-center p-8 text-muted-foreground">{mailStore.offline ? <span className="flex items-center gap-2 text-sm"><CloudOff className="size-4" /><Trans id="This message is not available offline yet." /></span> : <LoaderCircle className="animate-spin" />}</div>

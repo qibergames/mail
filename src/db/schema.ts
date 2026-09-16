@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
@@ -228,6 +228,11 @@ export const messages = sqliteTable(
 		threadId: text("thread_id"),
 		// Why an outbound message never reached its recipient, from a bounce event or delivery status notification.
 		deliveryError: text("delivery_error"),
+		// What the judgment model made of an inbound message: its inbox tab, how much attention it needs,
+		// and the smaller findings (login code, meeting, phishing pressure) as JSON.
+		category: text("category", { enum: ["primary", "promotions", "updates", "social", "forums"] }),
+		importance: real("importance"),
+		insight: text("insight"),
 		createdAt: integer("created_at", { mode: "timestamp" })
 			.notNull()
 			.$defaultFn(() => new Date()),
@@ -242,6 +247,7 @@ export const messages = sqliteTable(
 		index("messages_mailbox_idx").on(t.mailboxId),
 		index("messages_mailbox_updated_idx").on(t.mailboxId, t.updatedAt),
 		index("messages_folder_idx").on(t.folderId),
+		index("messages_mailbox_category_idx").on(t.mailboxId, t.category),
 		index("messages_provider_message_idx").on(t.providerMessageId),
 		uniqueIndex("messages_raw_r2_key_idx").on(t.rawR2Key),
 	],

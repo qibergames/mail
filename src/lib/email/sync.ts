@@ -19,6 +19,9 @@ export const messageSummaryColumns = {
   snoozedUntil: messages.snoozedUntil,
   threadId: messages.threadId,
   deliveryError: messages.deliveryError,
+  category: messages.category,
+  importance: messages.importance,
+  insight: messages.insight,
   createdAt: messages.createdAt,
   updatedAt: messages.updatedAt,
 }

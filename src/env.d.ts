@@ -8,6 +8,7 @@ declare global {
     CF_EMAIL?: string
     CF_API_KEY?: string
     CF_EMAIL_WORKER_NAME?: string
+    TYPESAFE_API_KEY?: string
     TURNSTILE_SECRET_KEY?: string
     VITE_TURNSTILE_SITE_KEY?: string
     VAPID_SUBJECT?: string

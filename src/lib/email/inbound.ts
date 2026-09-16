@@ -11,6 +11,7 @@ import { readableText, snippetFrom, textFromHtml } from './html'
 import { resolveDestination, resolveInbound } from './routing'
 import { classifySpam, needsSecondOpinion } from './spam'
 import { isConfidentSpam, judgeSpamWithAi, reserveAiBudget } from './spam-ai'
+import { candidateCodes, judgeMail } from './typesafe'
 import { removeMessages } from './sync'
 import { parseMessageIds } from './threads'
 import { sendNewMailPush } from '@/lib/push'
@@ -130,11 +131,18 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
         senderDomainHistory: await senderDomainHistory(db, decision.mailbox.userId, senderAddress),
       }
     : null
-  let verdict = signals ? classifySpam(signals) : null
-  if (signals && verdict && needsSecondOpinion(verdict)) {
+  // One judgment request answers everything the mailbox wants to know: which tab the message belongs in,
+  // how much attention it needs, and whether it is unwanted. Filed mail and our own bounces skip it.
+  const plain = readableText(text, html)
+  const judgment = signals
+    ? await judgeMail(env, db, { from, to: payload.to, subject: parsed.subject ?? null, body: plain, candidateCodes: candidateCodes(plain) })
+    : null
+  let verdict = signals ? classifySpam({ ...signals, unsolicited: judgment?.unsolicited }) : null
+  // Without a judgment model, unsigned borderline mail still gets the Workers AI second opinion.
+  if (signals && verdict && !judgment && needsSecondOpinion(verdict)) {
     const opinion = await judgeSpamWithAi(
       { ai: env.AI, rateLimit: env.AI_SPAM_RATE_LIMIT, reserveBudget: () => reserveAiBudget(db) },
-      { from: senderAddress, to: payload.to, subject: parsed.subject, text: readableText(text, html) },
+      { from: senderAddress, to: payload.to, subject: parsed.subject, text: plain },
     )
     if (isConfidentSpam(opinion)) verdict = classifySpam({ ...signals, aiFlagged: true })
   }
@@ -159,6 +167,10 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
     rawR2Key: payload.rawR2Key,
     status: finalStatus,
     threadId,
+    // A message the filter rejected needs no tab, and the confident category is the only one worth filing by.
+    category: finalStatus === 'received' && judgment && judgment.categoryConfidence >= 0.5 ? judgment.category : null,
+    importance: finalStatus === 'received' ? judgment?.importance ?? null : null,
+    insight: judgment ? insightJson(judgment) : null,
   })
 
   const attachments = parsed.attachments.map((attachment, index) => ({
@@ -194,7 +206,9 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
     method: 'POST',
     body: JSON.stringify({ type: 'message:new', messageId, mailboxId: decision.mailbox!.id }),
   })))
-  if (finalStatus === 'received') {
+  // Routine mail lands quietly: a newsletter should not light up a phone the way a person writing does.
+  const worthWaking = judgment?.importance == null || judgment.importance >= 0.75
+  if (finalStatus === 'received' && worthWaking) {
     await sendNewMailPush(env, userIds, {
       id: messageId,
       mailboxId: decision.mailbox.id,
@@ -243,6 +257,19 @@ export async function listMessagesForMailboxes(mailboxIds: Array<string>, status
     eq(messages.status, status),
   )).orderBy(sql`${messages.createdAt} DESC`).limit(100)
 }
+
+/** The smaller findings, kept together so one column carries whatever the judgment turned up. */
+function insightJson(judgment: NonNullable<Awaited<ReturnType<typeof judgeMail>>>) {
+  const insight = {
+    ...(judgment.loginCode ? { loginCode: judgment.loginCode } : {}),
+    ...(judgment.phishing !== null ? { phishing: round(judgment.phishing) } : {}),
+    ...(judgment.expectsReply !== null ? { expectsReply: round(judgment.expectsReply) } : {}),
+    ...(judgment.meeting !== null ? { meeting: round(judgment.meeting) } : {}),
+  }
+  return Object.keys(insight).length ? JSON.stringify(insight) : null
+}
+
+const round = (value: number) => Math.round(value * 100) / 100
 
 /** Counts the user's earlier mail from the sender's domain that they left in spam versus kept. */
 async function senderDomainHistory(db: ReturnType<typeof getDb>, userId: string, senderAddress: string) {

@@ -14,6 +14,8 @@ export type SpamSignals = {
   senderDomainHistory: { spam: number; kept: number }
   /** Workers AI judged the content to be spam with high confidence. */
   aiFlagged?: boolean
+  /** Calibrated probability from the judgment model that this is unsolicited bulk mail, a scam or phishing. */
+  unsolicited?: number | null
 }
 
 export type SpamVerdict = { spam: boolean; score: number; reasons: Array<string> }
@@ -75,6 +77,13 @@ export function classifySpam(signals: SpamSignals): SpamVerdict {
   const history = signals.senderDomainHistory
   if (history.spam >= 2 && history.spam > history.kept) add(3, 'reported-domain')
   if (signals.aiFlagged) add(3, 'ai-spam')
+  // A calibrated probability says more than a yes or no, and a confident "no" is evidence for the message too.
+  const unsolicited = signals.unsolicited
+  if (typeof unsolicited === 'number') {
+    if (unsolicited >= 0.9) add(4, 'judged-spam')
+    else if (unsolicited >= 0.75) add(2, 'judged-likely-spam')
+    else if (unsolicited <= 0.1) add(-2, 'judged-wanted')
+  }
 
   return { spam: score >= SPAM_THRESHOLD, score, reasons }
 }

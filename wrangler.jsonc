@@ -33,6 +33,11 @@
       "name": "AI_SPAM_RATE_LIMIT",
       "namespace_id": "1002",
       "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "AI_JUDGMENT_RATE_LIMIT",
+      "namespace_id": "1003",
+      "simple": { "limit": 60, "period": 60 }
     }
   ],
   "ai": { "binding": "AI", "remote": true },
