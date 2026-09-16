@@ -1,11 +1,13 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import PostalMime from 'postal-mime'
 import { getDb } from '@/db'
-import { autoReplyDeliveries, contacts, mailboxAccess, messages, routingRules, users } from '@/db/schema'
+import { autoReplyDeliveries, contacts, domains, mailboxAccess, messages, routingRules, users } from '@/db/schema'
 import { newId } from '@/lib/ids'
 import { formatAddress, parseAddress } from './address'
 import { storeAttachments } from './attachments'
+import { snippetFrom, textFromHtml } from './html'
 import { resolveDestination, resolveInbound } from './routing'
+import { classifySpam } from './spam'
 import { removeMessages } from './sync'
 import { parseMessageIds } from './threads'
 import { sendNewMailPush } from '@/lib/push'
@@ -17,10 +19,6 @@ export type InboundQueueMessage = {
   to: string
   rawR2Key: string
   headers: Record<string, string>
-}
-
-function textFromHtml(html?: string | null) {
-  return (html ?? '').replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 function attachmentBuffer(content: string | Uint8Array | ArrayBuffer) {
@@ -98,7 +96,7 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
     : payload.from
   const text = parsed.text ?? null
   const html = parsed.html ?? null
-  const snippet = (text?.trim() || textFromHtml(html)).replace(/\s+/g, ' ').slice(0, 200)
+  const snippet = snippetFrom(text, html)
   const destination = await resolveDestination(db, decision.mailbox.id, {
     to: payload.to,
     from,
@@ -107,7 +105,20 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
   })
   const senderAddress = (parsed.from && 'address' in parsed.from ? parsed.from.address ?? payload.from : payload.from).toLowerCase()
   const blocked = (await db.select({ blocked: contacts.blocked }).from(contacts).where(and(eq(contacts.userId, decision.mailbox.userId), eq(contacts.email, senderAddress))).limit(1)).at(0)?.blocked
-  const finalStatus = blocked ? 'spam' : destination.status
+  // A rule that files the message somewhere is the user's own decision, so the spam filter only judges the rest.
+  const unfiled = destination.status === 'received' && !destination.folderId
+  const verdict = !blocked && unfiled
+    ? classifySpam({
+        headers: parsed.headers,
+        envelopeTo: payload.to,
+        from: senderAddress,
+        recipients: [...(parsed.to ?? []), ...(parsed.cc ?? [])].flatMap((entry) => entry.group ?? [entry]).flatMap((entry) => entry.address ? [entry.address] : []),
+        hostedDomains: (await db.select({ hostname: domains.hostname }).from(domains)).map((domain) => domain.hostname),
+        senderDomainHistory: await senderDomainHistory(db, decision.mailbox.userId, senderAddress),
+      })
+    : null
+  if (verdict?.spam) console.log('Inbound message classified as spam', { from: senderAddress, to: payload.to, score: verdict.score, reasons: verdict.reasons })
+  const finalStatus = blocked || verdict?.spam ? 'spam' : destination.status
   const messageId = newId('msg')
   const threadId = await resolveThreadId(db, decision.mailbox.userId, parsed.inReplyTo, parsed.references, parsed.messageId ?? messageId)
 
@@ -161,12 +172,14 @@ export async function processInboundEmail(env: CloudflareEnv, payload: InboundQu
     method: 'POST',
     body: JSON.stringify({ type: 'message:new', messageId, mailboxId: decision.mailbox!.id }),
   })))
-  await sendNewMailPush(env, userIds, {
-    id: messageId,
-    mailboxId: decision.mailbox.id,
-    from,
-    subject: parsed.subject,
-  }).catch((error) => console.error('Web Push dispatch failed', error))
+  if (finalStatus === 'received') {
+    await sendNewMailPush(env, userIds, {
+      id: messageId,
+      mailboxId: decision.mailbox.id,
+      from,
+      subject: parsed.subject,
+    }).catch((error) => console.error('Web Push dispatch failed', error))
+  }
   await enqueueWebhookEvent(env, decision.mailbox.userId, 'message.received', { messageId, mailboxId: decision.mailbox.id, from, to: payload.to, subject: parsed.subject }).catch((error) => console.error('Webhook enqueue failed', error))
 
   if (decision.mailbox.autoReplyEnabled && finalStatus === 'received') {
@@ -207,6 +220,18 @@ export async function listMessagesForMailboxes(mailboxIds: Array<string>, status
     inArray(messages.mailboxId, mailboxIds),
     eq(messages.status, status),
   )).orderBy(sql`${messages.createdAt} DESC`).limit(100)
+}
+
+/** Counts the user's earlier mail from the sender's domain that they left in spam versus kept. */
+async function senderDomainHistory(db: ReturnType<typeof getDb>, userId: string, senderAddress: string) {
+  const domain = senderAddress.slice(senderAddress.lastIndexOf('@') + 1)
+  // from_addr is stored either bare or as `"Name" <address>`.
+  const fromDomain = sql`(lower(${messages.fromAddr}) like ${`%@${domain}`} or lower(${messages.fromAddr}) like ${`%@${domain}>`})`
+  const row = (await db.select({
+    spam: sql<number>`coalesce(sum(${messages.status} = 'spam'), 0)`,
+    kept: sql<number>`coalesce(sum(${messages.status} in ('received', 'archived')), 0)`,
+  }).from(messages).where(and(eq(messages.userId, userId), eq(messages.direction, 'inbound'), fromDomain))).at(0)
+  return { spam: Number(row?.spam ?? 0), kept: Number(row?.kept ?? 0) }
 }
 
 /** Joins the conversation of any message referenced by the headers; otherwise starts a new one. */

@@ -5,6 +5,7 @@ import { domains, mailboxes, messages } from '@/db/schema'
 import { newId } from '@/lib/ids'
 import { removeMessages } from './sync'
 import { storeAttachments } from './attachments'
+import { snippetFrom } from './html'
 import { accessibleMailboxIds } from './outbound'
 
 export type RawEmail = { name: string; content: ArrayBuffer }
@@ -24,7 +25,7 @@ export async function importRawEmails(env: CloudflareEnv, userId: string, mailbo
       await env.BUCKET.put(rawR2Key, file.content, { httpMetadata: { contentType: 'message/rfc822' } })
       const from = email.from && 'address' in email.from ? email.from.address ?? '' : ''
       const to = email.to?.flatMap((entry) => 'address' in entry && entry.address ? [entry.address] : []).join(', ') || `${mailbox.box.localPart}@${mailbox.hostname}`
-      await db.insert(messages).values({ id, userId: mailbox.box.userId, mailboxId: mailbox.box.id, direction: 'inbound', providerMessageId, fromAddr: from, toAddr: to, subject: email.subject, snippet: (email.text ?? '').replace(/\s+/g, ' ').slice(0, 200), textBody: email.text ?? null, htmlBody: email.html ?? null, rawR2Key, status: 'received', read: true, createdAt: email.date ? new Date(email.date) : new Date() })
+      await db.insert(messages).values({ id, userId: mailbox.box.userId, mailboxId: mailbox.box.id, direction: 'inbound', providerMessageId, fromAddr: from, toAddr: to, subject: email.subject, snippet: snippetFrom(email.text, email.html), textBody: email.text ?? null, htmlBody: email.html ?? null, rawR2Key, status: 'received', read: true, createdAt: email.date ? new Date(email.date) : new Date() })
       await storeAttachments(env, id, email.attachments.map((attachment, index) => ({ filename: attachment.filename ?? `attachment-${index + 1}`, type: attachment.mimeType || 'application/octet-stream', content: typeof attachment.content === 'string' ? new TextEncoder().encode(attachment.content).buffer : attachment.content instanceof ArrayBuffer ? attachment.content : attachment.content.buffer.slice(attachment.content.byteOffset, attachment.content.byteOffset + attachment.content.byteLength) as ArrayBuffer, disposition: attachment.disposition === 'inline' ? 'inline' as const : 'attachment' as const, contentId: attachment.contentId })))
       result.ids.push(id)
     } catch (error) {
