@@ -41,6 +41,13 @@ test('treats a Cloudflare hop without transport details as unknown and reads SPF
   ])).toMatchObject({ mailedBy: 'eu-west-1.amazonses.com', signedBy: 'getlago.com', spf: 'pass', dkim: 'pass', dmarc: 'pass', encryption: 'unknown' })
 })
 
+test('judges encryption by the hop into our MX, not by relays inside the sender network', () => {
+  expect(extractSecurityDetails([
+    { key: 'Received', value: 'from mta231b-ord.mtasv.net (104.245.209.231) by cloudflare-email.net (cloudflare) id XNhXSt53pu5p for <svetch@qibergames.com>; Mon, 26 Oct 2026 22:33:03 +0000' },
+    { key: 'Received', value: 'from ip-172-26-13-211.us-east-2.compute.internal (172.26.13.211) by production-pmta-useast2.internal.postmarkapp.com (KumoMTA 10.97.240.44) with ESMTP id 34def243 for <svetch@qibergames.com>; Mon, 26 Oct 2026 22:33:03 +0000' },
+  ])).toMatchObject({ encryption: 'unknown' })
+})
+
 test('reports failed verification and missing encryption', () => {
   expect(extractSecurityDetails([
     { key: 'Authentication-Results', value: 'mx.cloudflare.net; dkim=none; spf=fail smtp.mailfrom=spoof@evil.test; dmarc=fail header.from=bank.test' },

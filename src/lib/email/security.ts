@@ -51,11 +51,12 @@ export function extractSecurityDetails(headers: Array<Header>): SecurityDetails 
   const signer = auth.match(/header\.d=([^\s;]+)/i)?.[1]
     ?? find('dkim-signature')[0]?.value.match(/(?:^|;)\s*d=([^\s;]+)/i)?.[1]
   // "with ESMTPS"/"SMTPS" or a TLS version means the hop was encrypted, "with SMTP"/"ESMTP" means plain text.
-  // Cloudflare Email Routing records neither, so its hops leave the transport unknown.
-  const transports = find('received')
-    .map((header) => header.value.match(/\bwith\s+([A-Z0-9]*SMTPS?A?)\b/i)?.[1].toUpperCase() ?? (/\bTLS\d/i.test(header.value) ? 'TLS' : null))
-    .filter((transport): transport is string => transport !== null)
-  const encryption = transports.some((transport) => transport === 'TLS' || /SMTPSA?$/.test(transport)) ? 'tls' : transports.length ? 'none' : 'unknown'
+  // Only the topmost Received header describes the hop into our own MX; older ones are relays inside the
+  // sender's network (often plain SMTP between private hosts) and say nothing about the delivery to us.
+  // Cloudflare Email Routing records no transport, so its hop leaves the encryption unknown.
+  const received = find('received')[0]?.value ?? ''
+  const transport = received.match(/\bwith\s+([A-Z0-9]*SMTPS?A?)\b/i)?.[1].toUpperCase() ?? (/\bTLS\d/i.test(received) ? 'TLS' : null)
+  const encryption = transport === null ? 'unknown' : transport === 'TLS' || /SMTPSA?$/.test(transport) ? 'tls' : 'none'
   return {
     date: find('date')[0]?.value ?? null,
     mailedBy: mailFrom ? domainOf(mailFrom) : null,
