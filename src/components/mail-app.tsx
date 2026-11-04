@@ -37,7 +37,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { Input } from './ui/input'
 import { checkForUpdate } from '@/lib/app-update'
 import { authClient } from '@/lib/auth-client'
-import { resolveInlineImages } from '@/lib/email/html'
+import { isUnstyledHtml, resolveInlineImages } from '@/lib/email/html'
 import type { SecurityDetails } from '@/lib/email/security'
 import { clampMessageListWidth } from '@/lib/mail-layout'
 import { categoryOf, mailStore, readInsight } from '@/lib/mail-store'
@@ -697,9 +697,13 @@ function MessageHeader({ message, security, open, onToggle, ownAddresses, onColl
   )
 }
 
-/** Renders the HTML body in a sandboxed iframe that grows with its content, including late-loading images. */
+/**
+ * Renders the HTML body in a sandboxed iframe that grows with its content, including late-loading images. Mail that
+ * sets no colours of its own follows the app theme like Gmail does; designed mail keeps a white page.
+ */
 function MessageFrame({ title, html }: { title: string; html: string }) {
   const ref = useRef<HTMLIFrameElement>(null)
+  const unstyled = isUnstyledHtml(html)
   useEffect(() => {
     const frame = ref.current
     if (!frame) return
@@ -708,12 +712,27 @@ function MessageFrame({ title, html }: { title: string; html: string }) {
     const fit = () => {
       const doc = frame.contentDocument
       if (!doc) return
-      const height = Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight, 200)
-      frame.style.height = `${height}px`
+      // Measure the content rather than the document, which never reports less than the frame's own height.
+      const content = doc.createRange()
+      content.selectNodeContents(doc.body)
+      frame.style.height = `${Math.ceil(content.getBoundingClientRect().bottom + parseFloat(getComputedStyle(doc.body).paddingBottom))}px`
     }
+    // The frame cannot inherit the app's colours, so copy them in, and again whenever the theme switches.
+    // A matching color-scheme also keeps the browser from painting an opaque backdrop behind the frame.
+    const paint = () => {
+      const root = frame.contentDocument?.documentElement
+      if (!root || !unstyled) return
+      const app = getComputedStyle(document.documentElement)
+      root.style.colorScheme = app.colorScheme
+      root.style.color = getComputedStyle(frame).color
+      root.style.setProperty('--link', app.getPropertyValue('--primary'))
+    }
+    const themeObserver = new MutationObserver(paint)
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] })
     const attach = () => {
       const doc = frame.contentDocument
       if (!doc) return
+      paint()
       fit()
       observer = new ResizeObserver(fit)
       observer.observe(doc.documentElement)
@@ -728,17 +747,21 @@ function MessageFrame({ title, html }: { title: string; html: string }) {
     if (frame.contentDocument?.readyState === 'complete' && frame.contentDocument.body.childElementCount) attach()
     return () => {
       frame.removeEventListener('load', attach)
+      themeObserver.disconnect()
       observer?.disconnect()
       if (timer) clearTimeout(timer)
     }
-  }, [html])
+  }, [html, unstyled])
+  // Senders that name no font get the app's, at Gmail's reading size, instead of the browser's serif default.
+  const base = 'html,body{margin:0;max-width:100%;overflow-x:hidden;word-break:break-word}body{font:14px/1.6 Inter,ui-sans-serif,system-ui,sans-serif}img,table{max-width:100%!important;height:auto}'
+  const theme = unstyled ? 'a{color:var(--link)}' : 'body{padding:16px}'
   return <iframe
     ref={ref}
     title={title}
     sandbox="allow-same-origin"
     referrerPolicy="no-referrer"
     scrolling="no"
-    className="mt-6 block w-[calc(100%+2rem)] max-w-none -mx-4 min-h-48 border-0 bg-white sm:mx-0 sm:w-full md:mt-8"
-    srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;max-width:100%;overflow-x:hidden;word-break:break-word}img,table{max-width:100%!important;height:auto}${QUOTE_STYLE}</style>${html}`}
+    className={cn('mt-6 block border-0 md:mt-8', unstyled ? 'w-full bg-transparent' : 'w-[calc(100%+2rem)] max-w-none -mx-4 bg-white sm:mx-0 sm:w-full sm:rounded-xl')}
+    srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${base}${theme}${QUOTE_STYLE}</style>${html}`}
   />
 }

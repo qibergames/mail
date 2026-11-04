@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { decodeEntities, resolveInlineImages, snippetFrom, textFromHtml } from './html'
+import { decodeEntities, isUnstyledHtml, resolveInlineImages, snippetFrom, textFromHtml } from './html'
 
 test('decodes numeric, hex and common named entities and leaves unknown ones alone', () => {
   expect(decodeEntities('leford&#237;tja &#x151;szel &amp; &nbsp;k&ouml;zel &#0;')).toBe('lefordítja őszel &  k&ouml;zel &#0;')
@@ -20,4 +20,14 @@ test('inline CID images use the authenticated attachment preview', () => {
   expect(resolveInlineImages('<img src="cid:logo@example.com">', 'message 1', [
     { id: 'attachment 1', contentId: '<logo@example.com>' },
   ])).toBe('<img src="/api/messages/message%201/attachments/attachment%201?preview=1">')
+})
+
+test('only HTML without colours of its own counts as unstyled', () => {
+  expect(isUnstyledHtml('Hi Benjamin, <br><br><a class="cursor-pointer" href="mailto:a@b.c">a@b.c</a><img src="https://x/open" width="1" height="1" border="0" alt="" />')).toBe(true)
+  expect(isUnstyledHtml('<div style="font-size:14px;line-height:1.5">Hi</div>')).toBe(true)
+  expect(isUnstyledHtml('<style>p{margin:0}</style><p>Hi</p>')).toBe(false)
+  expect(isUnstyledHtml('<table bgcolor="#f4f4f4"><tr><td>Hi</td></tr></table>')).toBe(false)
+  expect(isUnstyledHtml('<div style="background:#000">Hi</div>')).toBe(false)
+  expect(isUnstyledHtml('<span style="font-size:12px; color:#333">Hi</span>')).toBe(false)
+  expect(isUnstyledHtml('<font color="red">Hi</font>')).toBe(false)
 })

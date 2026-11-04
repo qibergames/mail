@@ -19,6 +19,14 @@ export function decodeEntities(text: string) {
   })
 }
 
+/**
+ * Whether an HTML body sets no colours of its own, like a reply typed in a webmail client. Such mail reads fine on
+ * any background, so it can follow the app theme; designed mail keeps the white page it was made for.
+ */
+export function isUnstyledHtml(html: string) {
+  return !/<style\b|\bbgcolor\s*=|\bbackground|(?:^|[\s;"'{])color\s*[:=]/i.test(html)
+}
+
 /** Plain text of an HTML body, for snippets and rule matching. */
 export function textFromHtml(html?: string | null) {
   const text = (html ?? '').replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ')
