@@ -736,9 +736,24 @@ function MessageFrame({ title, html }: { title: string; html: string }) {
     }
     const themeObserver = new MutationObserver(paint)
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] })
+    // The sandbox blocks the frame's own popups and top-level navigation, so a tapped link would do nothing or try to
+    // load the site inside the frame. Open it from the app instead: web links in a new tab that cannot reach back,
+    // mail and phone links in the device's own handler, anything else not at all.
+    let linkedDoc: Document | undefined
+    const follow = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return
+      const link = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!link || link.getAttribute('href')?.startsWith('#')) return
+      event.preventDefault()
+      if (link.protocol === 'http:' || link.protocol === 'https:') window.open(link.href, '_blank', 'noopener,noreferrer')
+      else if (link.protocol === 'mailto:' || link.protocol === 'tel:') window.location.href = link.href
+    }
     const attach = () => {
       const doc = frame.contentDocument
       if (!doc) return
+      linkedDoc?.removeEventListener('click', follow)
+      linkedDoc = doc
+      doc.addEventListener('click', follow)
       paint()
       fit()
       observer = new ResizeObserver(fit)
@@ -754,6 +769,7 @@ function MessageFrame({ title, html }: { title: string; html: string }) {
     if (frame.contentDocument?.readyState === 'complete' && frame.contentDocument.body.childElementCount) attach()
     return () => {
       frame.removeEventListener('load', attach)
+      linkedDoc?.removeEventListener('click', follow)
       themeObserver.disconnect()
       observer?.disconnect()
       if (timer) clearTimeout(timer)
