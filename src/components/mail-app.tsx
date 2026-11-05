@@ -709,20 +709,38 @@ function MessageFrame({ title, html }: { title: string; html: string }) {
     if (!frame) return
     let observer: ResizeObserver | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
+    // How tall the document scrolls, counting content nested in a scrolling body.
+    const extent = (doc: Document) => Math.max(doc.documentElement.scrollHeight, Math.ceil(doc.body.getBoundingClientRect().top) + doc.body.scrollHeight)
+    // The height the content needs. It leaves the frame at an intermediate height, which never paints: every caller
+    // sets the final height in the same task.
+    const measure = (doc: Document) => {
+      // Start from the content's own extent rather than the document's, which never reports less than the frame's
+      // height, so the frame can also shrink. That extent misses trailing margins and content nested in a scrolling
+      // body; whatever still overflows at that height shows up as scroll overflow, so grow over it.
+      const content = doc.createRange()
+      content.selectNodeContents(doc.body)
+      const estimate = Math.ceil(content.getBoundingClientRect().bottom + parseFloat(getComputedStyle(doc.body).paddingBottom))
+      frame.style.height = `${estimate}px`
+      const overflow = extent(doc)
+      return overflow > doc.documentElement.clientHeight ? overflow : estimate
+    }
+    // Growth that only follows the frame's own height (a block sized in vh): growing can never cover it, so past the
+    // first time it is ignored rather than feeding a loop that grows the frame forever.
+    let follow = 0
     const fit = () => {
       const doc = frame.contentDocument
       if (!doc?.body) return
-      const { documentElement: root, body } = doc
-      // Start from the content's own extent rather than the document's, which never reports less than the frame's
-      // height, so the frame can also shrink. That extent misses trailing margins, and content inside a box sized to
-      // the frame (designed mail often sets html,body{height:100%}) or nested in a scrolling body.
-      const content = doc.createRange()
-      content.selectNodeContents(body)
-      frame.style.height = `${Math.ceil(content.getBoundingClientRect().bottom + parseFloat(getComputedStyle(body).paddingBottom))}px`
-      // Whatever still overflows at that height shows up as scroll overflow, so grow over it. Both writes land in the
-      // same task, so nothing paints at the intermediate height.
-      const overflow = Math.max(root.scrollHeight, Math.ceil(body.getBoundingClientRect().top) + body.scrollHeight)
-      if (overflow > root.clientHeight) frame.style.height = `${overflow}px`
+      const before = parseFloat(frame.style.height) || frame.offsetHeight
+      const height = measure(doc)
+      if (follow && height > before && height - before <= follow) {
+        frame.style.height = `${before}px`
+        return
+      }
+      // Measure once more from the new height: content that asks for more again only follows the frame.
+      frame.style.height = `${height}px`
+      const again = measure(doc)
+      frame.style.height = `${height}px`
+      if (again > height) follow = again - height
     }
     // The frame cannot inherit the app's colours, so copy them in, and again whenever the theme switches.
     // A matching color-scheme also keeps the browser from painting an opaque backdrop behind the frame.
@@ -740,7 +758,7 @@ function MessageFrame({ title, html }: { title: string; html: string }) {
     // load the site inside the frame. Open it from the app instead: web links in a new tab that cannot reach back,
     // mail and phone links in the device's own handler, anything else not at all.
     let linkedDoc: Document | undefined
-    const follow = (event: MouseEvent) => {
+    const followLink = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return
       const link = (event.target as Element | null)?.closest('a[href]') as HTMLAnchorElement | null
       if (!link || link.getAttribute('href')?.startsWith('#')) return
@@ -750,33 +768,59 @@ function MessageFrame({ title, html }: { title: string; html: string }) {
     }
     const attach = () => {
       const doc = frame.contentDocument
-      if (!doc) return
-      linkedDoc?.removeEventListener('click', follow)
+      if (!doc?.body || doc === linkedDoc) return
+      linkedDoc?.removeEventListener('click', followLink)
       linkedDoc = doc
-      doc.addEventListener('click', follow)
+      follow = 0
+      doc.addEventListener('click', followLink)
       paint()
       fit()
+      observer?.disconnect()
       observer = new ResizeObserver(fit)
-      observer.observe(doc.documentElement)
-      observer.observe(doc.body)
+      // Designed mail often pins html and body to the frame's height, so watch the blocks inside them too.
+      for (const element of [doc.documentElement, doc.body, ...Array.from(doc.body.children)]) observer.observe(element)
       for (const image of Array.from(doc.images)) image.addEventListener('load', fit, { once: true })
       // Fonts and lazy layout can settle after load; re-measure a few times.
+      if (timer) clearTimeout(timer)
       let runs = 0
       const tick = () => { fit(); if (runs++ < 5) timer = setTimeout(tick, 400) }
       tick()
     }
+    // Safety net for what the events miss. On phones a refreshed page could leave the frame at the browser's default
+    // 150px until it came back from the lock screen: the srcdoc can load before this effect runs or be replaced after
+    // it, and layout can still change after the last re-measure. So while the page is visible, pick up a document that
+    // was never attached, and grow over content that has started to overflow. Both are plain reads otherwise.
+    const check = () => {
+      if (document.hidden) return
+      const doc = frame.contentDocument
+      // A document mid-navigation can already report complete before it has a body.
+      const body = doc?.body as HTMLElement | null | undefined
+      if (!doc || !body) return
+      if (doc !== linkedDoc) {
+        if (doc.readyState === 'complete' && body.childElementCount) attach()
+      } else if (extent(doc) - doc.documentElement.clientHeight > follow) fit()
+    }
+    const watchdog = setInterval(check, 1000)
+    document.addEventListener('visibilitychange', check)
+    window.addEventListener('pageshow', check)
     frame.addEventListener('load', attach)
-    if (frame.contentDocument?.readyState === 'complete' && frame.contentDocument.body.childElementCount) attach()
+    check()
     return () => {
       frame.removeEventListener('load', attach)
-      linkedDoc?.removeEventListener('click', follow)
+      document.removeEventListener('visibilitychange', check)
+      window.removeEventListener('pageshow', check)
+      clearInterval(watchdog)
+      linkedDoc?.removeEventListener('click', followLink)
       themeObserver.disconnect()
       observer?.disconnect()
       if (timer) clearTimeout(timer)
     }
   }, [html, unstyled])
   // Senders that name no font get the app's, at Gmail's reading size, instead of the browser's serif default.
-  const base = 'html,body{margin:0;max-width:100%;overflow-x:hidden;word-break:break-word}body{font:14px/1.6 Inter,ui-sans-serif,system-ui,sans-serif}img,table{max-width:100%!important;height:auto}'
+  // Designed mail often stretches html and body to the window (height:100%); in a frame that grows to fit its
+  // content, that would size the content by the frame and the frame by the content. Their natural height breaks the
+  // loop, and the specific selector outranks the sender's own html,body rule.
+  const base = 'html,body{margin:0;max-width:100%;overflow-x:hidden;word-break:break-word}:root,:root>body{height:auto!important;min-height:0!important}body{font:14px/1.6 Inter,ui-sans-serif,system-ui,sans-serif}img,table{max-width:100%!important;height:auto}'
   const theme = unstyled ? 'a{color:var(--link)}' : 'body{padding:16px}'
   return <iframe
     ref={ref}
