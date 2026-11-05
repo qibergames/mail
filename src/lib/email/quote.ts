@@ -7,8 +7,17 @@ const HTML_QUOTE_MARKERS = [
   /<div[^>]*id="(?:divRplyFwdMsg|appendonsend|isForwardContent)"[^>]*>/i,
   /<hr[^>]*id="stopSpelling"[^>]*>/i,
   /-----\s*Original Message\s*-----/i,
-  /<blockquote(?![^>]*class="[^"]*\bnot-quote)/i,
 ]
+
+/**
+ * A blockquote no client marked as a quote. Designed and sales mail uses these just to indent a paragraph, so one only
+ * counts when the message ends with it, the way a quoted earlier message does; otherwise everything after the first
+ * indented line would fold away.
+ */
+const BARE_BLOCKQUOTE = /<blockquote(?![^>]*class="[^"]*\bnot-quote)/i
+
+const visibleText = (html: string) =>
+  html.replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
 
 const TEXT_ATTRIBUTION = /^(?:>|On .+ wrote:?$|.+ (?:ezt írta|írta \(időpont)|.+ wrote:$|Am .+ schrieb .+:$|Le .+ a écrit\s*:$|-{2,}\s*(?:Original Message|Eredeti üzenet|Forwarded message|Továbbított üzenet)\s*-{2,}|From:\s.+|Feladó:\s.+)/i
 
@@ -21,9 +30,14 @@ export function collapseQuotedHtml(html: string) {
     const match = marker.exec(html)
     if (match && (best === null || match.index < best.index)) best = { index: match.index }
   }
+  const bare = BARE_BLOCKQUOTE.exec(html)
+  const lastClose = html.toLowerCase().lastIndexOf('</blockquote>')
+  if (bare && (best === null || bare.index < best.index) && (lastClose === -1 || !visibleText(html.slice(lastClose)))) {
+    best = { index: bare.index }
+  }
   if (!best) return html
   // Nothing but the quote: leave it visible.
-  if (!html.slice(0, best.index).replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()) return html
+  if (!visibleText(html.slice(0, best.index))) return html
   const tailStart = html.search(/<\/body>|<\/html>/i)
   const end = tailStart === -1 ? html.length : tailStart
   if (best.index >= end) return html

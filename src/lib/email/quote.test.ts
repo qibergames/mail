@@ -13,6 +13,13 @@ describe('collapseQuotedHtml', () => {
     const out = collapseQuotedHtml('<html><body><p>Hello there, this is a fresh reply.</p><blockquote type="cite">old</blockquote></body></html>')
     expect(out).toContain('</details></body></html>')
   })
+  test('folds a bare blockquote only when the message ends with it', () => {
+    const reply = '<p>Sounds good.</p><p>On Monday Petr wrote:</p><blockquote><p>Shall we meet?</p></blockquote>'
+    expect(collapseQuotedHtml(reply)).toContain('<details class="qm-quote">')
+    // Designed mail indenting a paragraph keeps the rest of the message visible.
+    const indented = '<table><tr><td><p>Hi Petr,</p><blockquote>Following up on our call.</blockquote><p>Next steps below.</p></td></tr></table>'
+    expect(collapseQuotedHtml(indented)).toBe(indented)
+  })
 })
 
 describe('splitQuotedText', () => {
