@@ -711,11 +711,18 @@ function MessageFrame({ title, html }: { title: string; html: string }) {
     let timer: ReturnType<typeof setTimeout> | undefined
     const fit = () => {
       const doc = frame.contentDocument
-      if (!doc) return
-      // Measure the content rather than the document, which never reports less than the frame's own height.
+      if (!doc?.body) return
+      const { documentElement: root, body } = doc
+      // Start from the content's own extent rather than the document's, which never reports less than the frame's
+      // height, so the frame can also shrink. That extent misses trailing margins, and content inside a box sized to
+      // the frame (designed mail often sets html,body{height:100%}) or nested in a scrolling body.
       const content = doc.createRange()
-      content.selectNodeContents(doc.body)
-      frame.style.height = `${Math.ceil(content.getBoundingClientRect().bottom + parseFloat(getComputedStyle(doc.body).paddingBottom))}px`
+      content.selectNodeContents(body)
+      frame.style.height = `${Math.ceil(content.getBoundingClientRect().bottom + parseFloat(getComputedStyle(body).paddingBottom))}px`
+      // Whatever still overflows at that height shows up as scroll overflow, so grow over it. Both writes land in the
+      // same task, so nothing paints at the intermediate height.
+      const overflow = Math.max(root.scrollHeight, Math.ceil(body.getBoundingClientRect().top) + body.scrollHeight)
+      if (overflow > root.clientHeight) frame.style.height = `${overflow}px`
     }
     // The frame cannot inherit the app's colours, so copy them in, and again whenever the theme switches.
     // A matching color-scheme also keeps the browser from painting an opaque backdrop behind the frame.
