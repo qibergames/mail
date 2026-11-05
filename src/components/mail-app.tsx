@@ -742,7 +742,7 @@ function MessageFrame({ title, html }: { title: string; html: string }) {
     let linkedDoc: Document | undefined
     const follow = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return
-      const link = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      const link = (event.target as Element | null)?.closest('a[href]') as HTMLAnchorElement | null
       if (!link || link.getAttribute('href')?.startsWith('#')) return
       event.preventDefault()
       if (link.protocol === 'http:' || link.protocol === 'https:') window.open(link.href, '_blank', 'noopener,noreferrer')
