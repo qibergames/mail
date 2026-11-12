@@ -4,6 +4,7 @@ import { contacts, domains, mailboxAccess, mailboxAliases, mailboxes, messageAtt
 import type { Attachment } from './attachments'
 import { storeAttachments } from './attachments'
 import { formatAddress, parseAddress } from './address'
+import { detectLanguage } from './language'
 import { newId } from '@/lib/ids'
 import { enqueueWebhookEvent } from '@/lib/webhooks'
 import { notifyRealtime, removeMessages } from './sync'
@@ -82,7 +83,11 @@ export async function queueOutboundEmail(
     : undefined
   const threadId = parent ? parent.threadId ?? parent.id : messageId
   const parentMessageId = parent?.providerMessageId?.replace(/^<|>$/g, '')
-  const headers = parentMessageId ? { 'In-Reply-To': `<${parentMessageId}>`, References: `<${parentMessageId}>` } : undefined
+  const language = detectLanguage(input.text)
+  const headers: Record<string, string> = {
+    ...(parentMessageId ? { 'In-Reply-To': `<${parentMessageId}>`, References: `<${parentMessageId}>` } : {}),
+    ...(language ? { 'Content-Language': language } : {}),
+  }
   const payload: OutboundQueueMessage = {
     type: 'outbound-mail',
     jobId,
@@ -92,7 +97,7 @@ export async function queueOutboundEmail(
     subject: input.subject,
     text,
     html: input.html,
-    headers,
+    headers: Object.keys(headers).length ? headers : undefined,
   }
 
   await db.batch([
