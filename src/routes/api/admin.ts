@@ -6,7 +6,7 @@ import { getDb } from '@/db'
 import { auditLogs, domains, mailboxAccess, mailboxAliases, mailboxes, routingRules, users } from '@/db/schema'
 import { describeIssues, errorResponse, requireAdmin } from '@/lib/api-auth'
 import { auth } from '@/lib/auth'
-import { createMailboxRoute, deleteMailboxRoute, deleteMailboxRouteByAddress, deleteSendingSubdomain, provisionDomain } from '@/lib/cloudflare-api'
+import { createMailboxRoute, deleteMailboxRoute, deleteMailboxRouteByAddress, deleteSendingSubdomain, ensureForwardDestination, listForwardDestinations, provisionDomain } from '@/lib/cloudflare-api'
 import { newId } from '@/lib/ids'
 import { deleteQueueFailure, listQueueFailures, retryQueueFailure } from '@/lib/queue-failures'
 import { hostnameSchema as hostname, localPartSchema as localPart } from '@/lib/validation'
@@ -28,6 +28,7 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('rule:update'), ruleId: z.string(), mailboxId: z.string().nullable(), name: z.string().trim().min(1).max(100), pattern: z.string().min(1).max(500), actionType: z.enum(['store', 'forward', 'reject']), forwardTo: z.union([z.literal(''), z.email()]), keepCopy: z.boolean(), enabled: z.boolean() }),
   z.object({ action: z.literal('rule:toggle'), ruleId: z.string(), enabled: z.boolean() }),
   z.object({ action: z.literal('rule:delete'), ruleId: z.string() }),
+  z.object({ action: z.literal('rule:verify-destination'), ruleId: z.string() }),
   z.object({ action: z.literal('failure:retry'), failureId: z.string() }),
   z.object({ action: z.literal('failure:delete'), failureId: z.string() }),
   z.object({ action: z.literal('rule:create'), domainId: z.string(), mailboxId: z.string().nullable(), name: z.string().trim().min(1).max(100), pattern: z.string().min(1).max(500), actionType: z.enum(['store', 'forward', 'reject']), forwardTo: z.union([z.literal(''), z.email()]), keepCopy: z.boolean() }),
@@ -49,7 +50,8 @@ export const Route = createFileRoute('/api/admin')({
           db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(100),
           listQueueFailures(),
         ])
-        return Response.json({ users: userRows, domains: domainRows, mailboxes: mailboxRows, aliases: aliasRows, access: accessRows, rules, logs, failures })
+        const forwardDestinations = await destinationStatuses(domainRows, rules)
+        return Response.json({ users: userRows, domains: domainRows, mailboxes: mailboxRows, aliases: aliasRows, access: accessRows, rules, logs, failures, forwardDestinations })
       },
       POST: async ({ request }) => {
         const session = await requireAdmin(request)
@@ -64,6 +66,41 @@ export const Route = createFileRoute('/api/admin')({
     },
   },
 })
+
+type DestinationStatus = 'verified' | 'pending' | 'missing'
+
+/** Whether Cloudflare will forward to each address a rule forwards to; null when the token cannot tell. */
+async function destinationStatuses(domainRows: Array<typeof domains.$inferSelect>, rules: Array<typeof routingRules.$inferSelect>) {
+  const forwarding = rules.filter((rule) => rule.action === 'forward' && rule.forwardTo)
+  if (!forwarding.length) return {}
+  const zoneIds = [...new Set(forwarding.map((rule) => domainRows.find((domain) => domain.id === rule.domainId)?.zoneId).filter((id): id is string => Boolean(id)))]
+  const lists = await Promise.allSettled(zoneIds.map((zoneId) => listForwardDestinations(env, zoneId)))
+  const failures = lists.filter((list) => list.status === 'rejected')
+  if (failures.length === lists.length) {
+    console.warn('Could not list Cloudflare destination addresses', failures[0]?.reason)
+    return null
+  }
+  const known = new Map(lists.flatMap((list) => list.status === 'fulfilled' ? list.value : []).map((item) => [item.email, item.verified]))
+  const statuses: Record<string, DestinationStatus> = {}
+  for (const rule of forwarding) {
+    const email = rule.forwardTo!.toLowerCase()
+    statuses[email] = known.get(email) === true ? 'verified' : known.has(email) ? 'pending' : 'missing'
+  }
+  return statuses
+}
+
+/** Registers a rule's forwarding address with Cloudflare; a failure is reported but never blocks saving the rule. */
+async function registerDestination(domainId: string, email: string, resend = false) {
+  const domain = (await getDb().select({ zoneId: domains.zoneId }).from(domains).where(eq(domains.id, domainId)).limit(1)).at(0)
+  if (!domain) return { warning: 'Unknown domain' }
+  try {
+    const destination = await ensureForwardDestination(env, domain.zoneId, email, { resend })
+    return { destination }
+  } catch (error) {
+    console.warn('Could not register Cloudflare destination address', error)
+    return { warning: `Cloudflare did not accept ${email} as a forwarding address: ${error instanceof Error ? error.message : String(error)}` }
+  }
+}
 
 async function runAdminAction(request: Request, session: Awaited<ReturnType<typeof requireAdmin>>, input: z.infer<typeof actionSchema>) {
   const db = getDb()
@@ -214,8 +251,14 @@ async function runAdminAction(request: Request, session: Awaited<ReturnType<type
     if (input.actionType === 'store' && !input.mailboxId) return Response.json({ error: 'Choose a mailbox to deliver to' }, { status: 400 })
     if (input.actionType === 'forward' && !input.forwardTo) return Response.json({ error: 'Choose an address to forward to' }, { status: 400 })
     if (input.mailboxId && !(await db.select({ id: mailboxes.id }).from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1)).length) return Response.json({ error: 'Invalid mailbox' }, { status: 400 })
-    const updated = await db.update(routingRules).set({ mailboxId: input.mailboxId, name: input.name, pattern: input.pattern, matchValue: input.pattern, action: input.actionType, forwardTo: input.actionType === 'forward' ? input.forwardTo : null, keepCopy: input.keepCopy, enabled: input.enabled }).where(and(eq(routingRules.id, input.ruleId), eq(routingRules.scope, 'domain'))).returning({ id: routingRules.id })
+    const updated = await db.update(routingRules).set({ mailboxId: input.mailboxId, name: input.name, pattern: input.pattern, matchValue: input.pattern, action: input.actionType, forwardTo: input.actionType === 'forward' ? input.forwardTo : null, keepCopy: input.keepCopy, enabled: input.enabled }).where(and(eq(routingRules.id, input.ruleId), eq(routingRules.scope, 'domain'))).returning({ id: routingRules.id, domainId: routingRules.domainId })
     if (!updated.length) return Response.json({ error: 'Unknown rule' }, { status: 404 })
+    if (input.actionType === 'forward') result = await registerDestination(updated[0].domainId, input.forwardTo)
+  } else if (input.action === 'rule:verify-destination') {
+    const rule = (await db.select().from(routingRules).where(and(eq(routingRules.id, input.ruleId), eq(routingRules.scope, 'domain'))).limit(1)).at(0)
+    if (!rule) return Response.json({ error: 'Unknown rule' }, { status: 404 })
+    if (rule.action !== 'forward' || !rule.forwardTo) return Response.json({ error: 'This rule does not forward' }, { status: 400 })
+    result = await registerDestination(rule.domainId, rule.forwardTo, true)
   } else {
     const domain = (await db.select({ id: domains.id }).from(domains).where(eq(domains.id, input.domainId)).limit(1)).at(0)
     if (!domain) return Response.json({ error: 'Unknown domain' }, { status: 400 })
@@ -224,7 +267,7 @@ async function runAdminAction(request: Request, session: Awaited<ReturnType<type
     if (input.mailboxId && !(await db.select({ id: mailboxes.id }).from(mailboxes).where(eq(mailboxes.id, input.mailboxId)).limit(1)).length) return Response.json({ error: 'Invalid mailbox' }, { status: 400 })
     const id = newId('rul')
     await db.insert(routingRules).values({ id, userId: session.user.id, domainId: input.domainId, mailboxId: input.mailboxId, scope: 'domain', name: input.name, pattern: input.pattern, matchField: 'email', matchOperator: 'contains', matchValue: input.pattern, action: input.actionType, forwardTo: input.actionType === 'forward' ? input.forwardTo : null, keepCopy: input.keepCopy })
-    result = { id }
+    result = { id, ...(input.actionType === 'forward' ? await registerDestination(input.domainId, input.forwardTo) : {}) }
   }
   await db.insert(auditLogs).values({ id: newId('log'), actorUserId: session.user.id, action: input.action, metadata: JSON.stringify(input.action.startsWith('user:') ? { userId: 'userId' in input ? input.userId : undefined } : input) })
   return Response.json(result ?? { ok: true })

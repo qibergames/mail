@@ -442,4 +442,11 @@ export const messages = {
   Version: 'Verzió',
   'Version {sha}, built {time}': '{sha} verzió, kiadva: {time}',
   'Account menu': 'Fiók menü',
+  'Saved. Cloudflare sent a confirmation link to {email}; forwarding starts once it is opened.': 'Mentve. A Cloudflare megerősítő linket küldött ide: {email}; a továbbítás a link megnyitása után indul.',
+  'Saved, but {email} has not confirmed the Cloudflare link yet, so nothing is forwarded to it.': 'Mentve, de a(z) {email} még nem erősítette meg a Cloudflare linket, ezért oda még semmi nem megy tovább.',
+  'Send confirmation link': 'Megerősítő link küldése',
+  'Cloudflare only forwards to confirmed addresses. Saving sends a confirmation link to a new address. If the address belongs to a mailbox here, a rule that keeps a copy also forwards its mail, and the copy stays in that mailbox.': 'A Cloudflare csak megerősített címekre továbbít. Új cím mentésekor megerősítő linket küldünk. Ha a minta egy itteni postaládára illik, a másolatot megtartó szabály annak a leveleit is továbbítja, a másolat pedig a postaládában marad.',
+  'Destination confirmed': 'Cél megerősítve',
+  'Awaiting confirmation': 'Megerősítésre vár',
+  'Destination not registered': 'Cél nincs regisztrálva',
 }

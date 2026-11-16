@@ -62,8 +62,9 @@ Every build is stamped with the commit it was built from and when. The account m
 | Email Sending → Edit | the mail zones | onboarding the sending domain |
 | DNS → Edit | the mail zones | writing the `cf-bounce` MX, SPF, DKIM and DMARC records that Email Sending requires |
 | Queues → Edit | account | subscribing the `qibermail-email-events` queue to each sending domain's bounce and complaint events |
+| Email Routing Addresses → Edit | account | registering the external addresses forward rules send to, which mails each one a confirmation link, and showing whether it is confirmed |
 
-The first three are needed to connect a domain at all. Without **DNS → Edit** the domain connects but *Enable sending* cannot write the records, so you would have to add them by hand from the domain page. Without **Queues → Edit** everything else works and a sent message is only marked undeliverable when the receiving server returns a delivery status notification.
+The first three are needed to connect a domain at all. Without **DNS → Edit** the domain connects but *Enable sending* cannot write the records, so you would have to add them by hand from the domain page. Without **Queues → Edit** everything else works and a sent message is only marked undeliverable when the receiving server returns a delivery status notification. Without **Email Routing Addresses → Edit** forward rules still save, but each external address has to be added and confirmed under *Email Routing → Destination addresses* in the Cloudflare dashboard.
 
 ## Manual Cloudflare deployment
 

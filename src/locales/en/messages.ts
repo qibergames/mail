@@ -442,4 +442,11 @@ export const messages = {
   Version: 'Version',
   'Version {sha}, built {time}': 'Version {sha}, built {time}',
   'Account menu': 'Account menu',
+  'Saved. Cloudflare sent a confirmation link to {email}; forwarding starts once it is opened.': 'Saved. Cloudflare sent a confirmation link to {email}; forwarding starts once it is opened.',
+  'Saved, but {email} has not confirmed the Cloudflare link yet, so nothing is forwarded to it.': 'Saved, but {email} has not confirmed the Cloudflare link yet, so nothing is forwarded to it.',
+  'Send confirmation link': 'Send confirmation link',
+  'Cloudflare only forwards to confirmed addresses. Saving sends a confirmation link to a new address. If the address belongs to a mailbox here, a rule that keeps a copy also forwards its mail, and the copy stays in that mailbox.': 'Cloudflare only forwards to confirmed addresses. Saving sends a confirmation link to a new address. If the address belongs to a mailbox here, a rule that keeps a copy also forwards its mail, and the copy stays in that mailbox.',
+  'Destination confirmed': 'Destination confirmed',
+  'Awaiting confirmation': 'Awaiting confirmation',
+  'Destination not registered': 'Destination not registered',
 }
