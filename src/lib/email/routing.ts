@@ -46,6 +46,16 @@ export function matchesRule(rule: Pick<Rule, 'pattern' | 'matchField' | 'matchOp
   })
 }
 
+type ForwardCandidate = Pick<Rule, 'action' | 'forwardTo' | 'keepCopy' | 'pattern' | 'matchField' | 'matchOperator' | 'matchValue'>
+
+/**
+ * The forward rule that also applies to an address with its own mailbox: it must keep a copy, name the
+ * address rather than be a catch-all, and match the recipient. Mail the mailbox itself sends is not forwarded.
+ */
+export function copyForwardRule<T extends ForwardCandidate>(rules: T[], to: string) {
+  return rules.find((rule) => rule.action === 'forward' && rule.forwardTo && rule.keepCopy && (rule.matchValue || rule.pattern).trim() !== '*' && matchesRule(rule, { to }))
+}
+
 async function mailboxForAddress(db: AppDatabase, domainId: string, local: string) {
   const normalized = normalizeLocalPart(local)
   const direct = await db.select().from(mailboxes).where(and(eq(mailboxes.domainId, domainId), eq(mailboxes.disabled, false)))
@@ -77,7 +87,13 @@ export async function resolveInbound(db: AppDatabase, to: string, from?: string)
   if (reject) return { action: 'reject', rejectReason: reject.rejectReason || undefined, ruleId: reject.id }
 
   const mailbox = await mailboxForAddress(db, domain.id, address.local)
-  if (mailbox) return { action: 'store', mailbox: { ...mailbox, hostname: domain.hostname } }
+  if (mailbox) {
+    const target = { ...mailbox, hostname: domain.hostname }
+    // An address with its own mailbox is always delivered there; a matching forward rule sends it on too.
+    const copy = copyForwardRule(rules, to)
+    if (copy?.forwardTo) return { action: 'forward', forwardTo: copy.forwardTo, keepCopy: true, mailbox: target, ruleId: copy.id }
+    return { action: 'store', mailbox: target }
+  }
 
   for (const rule of rules) {
     if (!matchesRule(rule, input)) continue

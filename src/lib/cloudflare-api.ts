@@ -364,3 +364,48 @@ export async function enableSending(env: CloudflareEnv, zoneId: string, hostname
   }
   return getSendingSetup(env, zoneId, hostname)
 }
+
+/**
+ * Cloudflare only forwards to destination addresses verified on the account. Adding one makes Cloudflare
+ * mail it a confirmation link; until that link is opened, forwarding to it fails.
+ */
+export type ForwardDestination = { email: string; verified: boolean }
+type DestinationAddress = { id?: string; tag?: string; email: string; verified: string | null }
+
+async function zoneAccountId(env: CloudflareEnv, zoneId: string) {
+  const zone = await cfRequest<{ account?: { id?: string } }>(env, `/zones/${zoneId}`)
+  const accountId = zone.account?.id ?? env.CF_AID
+  if (!accountId) throw new Error('Cloudflare account not found')
+  return accountId
+}
+
+async function destinationAddresses(env: CloudflareEnv, accountId: string) {
+  const all: DestinationAddress[] = []
+  for (let page = 1; page <= 10; page++) {
+    const batch = await cfRequest<DestinationAddress[]>(env, `/accounts/${accountId}/email/routing/addresses?per_page=50&page=${page}`)
+    all.push(...batch)
+    if (batch.length < 50) break
+  }
+  return all
+}
+
+export async function listForwardDestinations(env: CloudflareEnv, zoneId: string): Promise<ForwardDestination[]> {
+  const addresses = await destinationAddresses(env, await zoneAccountId(env, zoneId))
+  return addresses.map((item) => ({ email: item.email.toLowerCase(), verified: Boolean(item.verified) }))
+}
+
+/**
+ * Registers the address as a forwarding destination if it is not one yet, which sends the confirmation
+ * mail. With `resend`, an address still awaiting confirmation is re-added so Cloudflare mails a new link.
+ */
+export async function ensureForwardDestination(env: CloudflareEnv, zoneId: string, email: string, options: { resend?: boolean } = {}): Promise<ForwardDestination & { sent: boolean }> {
+  const accountId = await zoneAccountId(env, zoneId)
+  const target = email.trim().toLowerCase()
+  const existing = (await destinationAddresses(env, accountId)).find((item) => item.email.toLowerCase() === target)
+  if (existing?.verified) return { email: target, verified: true, sent: false }
+  if (existing && !options.resend) return { email: target, verified: false, sent: false }
+  const existingId = existing?.id ?? existing?.tag
+  if (existingId) await cfRequest<unknown>(env, `/accounts/${accountId}/email/routing/addresses/${existingId}`, { method: 'DELETE' })
+  await cfRequest<unknown>(env, `/accounts/${accountId}/email/routing/addresses`, { method: 'POST', body: JSON.stringify({ email: target }) })
+  return { email: target, verified: false, sent: true }
+}
