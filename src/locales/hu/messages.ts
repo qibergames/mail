@@ -247,6 +247,7 @@ export const messages = {
   'Manage contacts and blocked senders.': 'Névjegyek és letiltott feladók kezelése.',
   'Reusable drafts for common replies.': 'Újrafelhasználható sablonok gyakori válaszokhoz.',
   'Events with email invitations.': 'Események e-mailes meghívókkal.',
+  'Reply to this message': 'Válasz erre a levélre',
   'Reply to': 'Válaszcím',
   Cc: 'Másolat',
   Bcc: 'Titkos másolat',
