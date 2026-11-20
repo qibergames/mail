@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mailStore, matchesView } from './mail-store'
+import { categoryOf, mailStore, matchesView } from './mail-store'
 import type { MessageSummary } from './mail-store'
 
 function message(overrides: Partial<MessageSummary>): MessageSummary {
@@ -20,6 +20,21 @@ describe('matchesView', () => {
     expect(matchesView(message({ direction: 'outbound', status: 'sent' }), 'sent', undefined, now)).toBe(true)
     expect(matchesView(message({ direction: 'outbound', status: 'draft' }), 'sent', undefined, now)).toBe(false)
     expect(matchesView(message({ direction: 'outbound', status: 'draft' }), 'drafts', undefined, now)).toBe(true)
+  })
+})
+
+describe('categoryOf', () => {
+  test('important mail from another tab is shown on the main tab', () => {
+    expect(categoryOf(message({ category: 'forums', importance: 1.6 }))).toBe('primary')
+    expect(categoryOf(message({ category: 'promotions', importance: 1 }))).toBe('primary')
+  })
+  test('routine and unjudged mail keeps its tab', () => {
+    expect(categoryOf(message({ category: 'forums', importance: 0.4 }))).toBe('forums')
+    expect(categoryOf(message({ category: 'social', importance: null }))).toBe('social')
+    expect(categoryOf(message({}))).toBe('primary')
+  })
+  test('mail filed under the removed Updates tab is shown on the main tab', () => {
+    expect(categoryOf(message({ category: 'updates', importance: 0.2 }))).toBe('primary')
   })
 })
 
