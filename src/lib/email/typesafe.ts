@@ -8,8 +8,10 @@ export const TYPESAFE_DAILY_LIMIT = 500
 const BODY_CHARS = 2000
 const TIMEOUT_MS = 8000
 
-export type MailCategory = 'primary' | 'promotions' | 'updates' | 'social' | 'forums'
-export const MAIL_CATEGORIES: Array<MailCategory> = ['primary', 'promotions', 'updates', 'social', 'forums']
+export type MailCategory = 'primary' | 'promotions' | 'social' | 'forums'
+export const MAIL_CATEGORIES: Array<MailCategory> = ['primary', 'promotions', 'social', 'forums']
+/** Mail filed before the Updates tab was removed still carries it; it reads as primary. */
+export type StoredCategory = MailCategory | 'updates'
 
 export type ChoiceAnswer = { type: 'choice'; choice: string; probabilities: Record<string, number>; confidence: number }
 export type ScoreAnswer = { type: 'score'; score: number; legend: Record<string, string>; probabilities: Record<string, number>; confidence: number }
@@ -47,9 +49,8 @@ function questions(state: MailState) {
       type: 'choice',
       instructions: 'Which inbox category does this email belong to? Judge what the message is for, not who sent it.',
       criteria: {
-        primary: 'Written by a person to this recipient, or a reply in a conversation they take part in',
+        primary: 'Written by a person to this recipient, a reply in a conversation they take part in, or automated mail they expect: receipts, invoices, confirmations, security alerts, shipping, service notices',
         promotions: 'Marketing: offers, discounts, product announcements, sales campaigns',
-        updates: 'Automated but expected: receipts, invoices, confirmations, security alerts, shipping, service notices',
         social: 'Activity from a social network, community platform or game service the recipient uses',
         forums: 'Mailing lists, discussion groups and newsletters the recipient subscribed to',
       },

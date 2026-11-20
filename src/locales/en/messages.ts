@@ -424,7 +424,6 @@ export const messages = {
   'Categories': 'Categories',
   'Primary': 'Primary',
   'Promotions': 'Promotions',
-  'Updates': 'Updates',
   'Social': 'Social',
   'Forums': 'Forums',
   'Important': 'Important',

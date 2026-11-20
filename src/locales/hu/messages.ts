@@ -424,7 +424,6 @@ export const messages = {
   'Categories': 'Kategóriák',
   'Primary': 'Elsődleges',
   'Promotions': 'Promóciók',
-  'Updates': 'Értesítések',
   'Social': 'Közösségi',
   'Forums': 'Fórumok',
   'Important': 'Fontos',

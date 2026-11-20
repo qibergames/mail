@@ -14,7 +14,7 @@ function env(overrides: { key?: string | undefined; allowed?: boolean } = {}) {
 }
 
 const answers = {
-  category: { type: 'choice', choice: 'updates', probabilities: { updates: 0.9, primary: 0.1 }, confidence: 0.88 },
+  category: { type: 'choice', choice: 'social', probabilities: { social: 0.9, primary: 0.1 }, confidence: 0.88 },
   importance: { type: 'score', score: 1.4, legend: {}, probabilities: {}, confidence: 0.7 },
   unsolicited: { type: 'noul', noul: 0.02 },
   phishing: { type: 'noul', noul: 0.05 },
@@ -36,7 +36,7 @@ describe('judgeMail', () => {
   test('asks every question in one request and returns the typed answers', async () => {
     const call = stubFetch(Response.json({ answers }))
     expect(await judgeMail(env(), budgeted, { ...state, candidateCodes: ['529527'] })).toEqual({
-      category: 'updates',
+      category: 'social',
       categoryConfidence: 0.88,
       importance: 1.4,
       unsolicited: 0.02,
@@ -56,7 +56,7 @@ describe('judgeMail', () => {
     const body = JSON.parse((call.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { questions: Record<string, unknown> }
     expect(body.questions.login_code).toBeUndefined()
     // The model still answers it in this stub; without candidates the answer is not trusted either way.
-    expect(judgment?.category).toBe('updates')
+    expect(judgment?.category).toBe('social')
   })
 
   test('skips the call without a key, over the rate limit or over the daily budget', async () => {

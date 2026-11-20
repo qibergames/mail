@@ -229,7 +229,8 @@ export const messages = sqliteTable(
 		// Why an outbound message never reached its recipient, from a bounce event or delivery status notification.
 		deliveryError: text("delivery_error"),
 		// What the judgment model made of an inbound message: its inbox tab, how much attention it needs,
-		// and the smaller findings (login code, meeting, phishing pressure) as JSON.
+		// and the smaller findings (login code, meeting, phishing pressure) as JSON. "updates" is no longer
+		// assigned; rows that still carry it are shown on the primary tab.
 		category: text("category", { enum: ["primary", "promotions", "updates", "social", "forums"] }),
 		importance: real("importance"),
 		insight: text("insight"),

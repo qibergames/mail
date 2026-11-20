@@ -48,7 +48,7 @@ import type { MailCategory } from '@/lib/email/typesafe'
 import { QUOTE_STYLE, collapseQuotedHtml, quoteForReply, splitQuotedText } from '@/lib/email/quote'
 import { cn } from '@/lib/utils'
 
-const categoryLabels: Record<MailCategory, string> = { primary: 'Primary', promotions: 'Promotions', updates: 'Updates', social: 'Social', forums: 'Forums' }
+const categoryLabels: Record<MailCategory, string> = { primary: 'Primary', promotions: 'Promotions', social: 'Social', forums: 'Forums' }
 
 export type MailView = 'inbox' | 'sent' | 'drafts' | 'starred' | 'snoozed' | 'archived' | 'spam' | 'trash'
 

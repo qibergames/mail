@@ -1,5 +1,6 @@
 import type { MailView } from '@/components/mail-app'
-import type { MailCategory } from '@/lib/email/typesafe'
+import { MAIL_CATEGORIES } from '@/lib/email/typesafe'
+import type { MailCategory, StoredCategory } from '@/lib/email/typesafe'
 
 export type MessageSummary = {
   id: string
@@ -18,7 +19,7 @@ export type MessageSummary = {
   /** Why an outbound message bounced; absent on summaries cached before this was synced. */
   deliveryError?: string | null
   /** Inbox tab, attention level and smaller findings; absent until a message has been judged. */
-  category?: MailCategory | null
+  category?: StoredCategory | null
   importance?: number | null
   insight?: string | null
   createdAt: string
@@ -345,11 +346,13 @@ export type MessageInsight = { loginCode?: string; phishing?: number; expectsRep
 export const SURFACE_IMPORTANCE = 1
 
 /** Mail another tab would hide that needs attention, so it is shown on the main tab instead. */
-export const isSurfaced = (message: MessageSummary) =>
-  message.category != null && message.category !== 'primary' && (message.importance ?? 0) >= SURFACE_IMPORTANCE
+export const isSurfaced = (message: MessageSummary) => storedTab(message) !== 'primary' && (message.importance ?? 0) >= SURFACE_IMPORTANCE
 
-/** Mail judged before categories existed, or judged as uncategorisable, belongs on the main tab. */
-export const categoryOf = (message: MessageSummary): MailCategory => isSurfaced(message) ? 'primary' : message.category ?? 'primary'
+/** Unjudged, uncategorisable and legacy Updates mail all belong on the main tab. */
+const storedTab = (message: MessageSummary): MailCategory =>
+  MAIL_CATEGORIES.find((category) => category === message.category) ?? 'primary'
+
+export const categoryOf = (message: MessageSummary): MailCategory => isSurfaced(message) ? 'primary' : storedTab(message)
 
 export function readInsight(message: MessageSummary): MessageInsight | null {
   if (!message.insight) return null

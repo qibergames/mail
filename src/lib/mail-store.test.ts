@@ -25,13 +25,16 @@ describe('matchesView', () => {
 
 describe('categoryOf', () => {
   test('important mail from another tab is shown on the main tab', () => {
-    expect(categoryOf(message({ category: 'updates', importance: 1.6 }))).toBe('primary')
+    expect(categoryOf(message({ category: 'forums', importance: 1.6 }))).toBe('primary')
     expect(categoryOf(message({ category: 'promotions', importance: 1 }))).toBe('primary')
   })
   test('routine and unjudged mail keeps its tab', () => {
-    expect(categoryOf(message({ category: 'updates', importance: 0.4 }))).toBe('updates')
+    expect(categoryOf(message({ category: 'forums', importance: 0.4 }))).toBe('forums')
     expect(categoryOf(message({ category: 'social', importance: null }))).toBe('social')
     expect(categoryOf(message({}))).toBe('primary')
+  })
+  test('mail filed under the removed Updates tab is shown on the main tab', () => {
+    expect(categoryOf(message({ category: 'updates', importance: 0.2 }))).toBe('primary')
   })
 })
 
