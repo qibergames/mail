@@ -427,6 +427,8 @@ export const messages = {
   'Updates': 'Updates',
   'Social': 'Social',
   'Forums': 'Forums',
+  'Important': 'Important',
+  'Shown here from another tab because it needs your attention': 'Shown here from another tab because it needs your attention',
   'This message asks for credentials or payment in a way that looks deceptive.': 'This message asks for credentials or payment in a way that looks deceptive.',
   'Check the sender address before you act on it.': 'Check the sender address before you act on it.',
   'Draft rule': 'Draft rule',

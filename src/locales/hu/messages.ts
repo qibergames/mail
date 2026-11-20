@@ -427,6 +427,8 @@ export const messages = {
   'Updates': 'Értesítések',
   'Social': 'Közösségi',
   'Forums': 'Fórumok',
+  'Important': 'Fontos',
+  'Shown here from another tab because it needs your attention': 'Egy másik fülről került ide, mert figyelmet igényel',
   'This message asks for credentials or payment in a way that looks deceptive.': 'Ez a levél megtévesztő módon kér belépési adatot vagy fizetést.',
   'Check the sender address before you act on it.': 'Ellenőrizd a feladó címét, mielőtt bármit tennél.',
   'Draft rule': 'Szabály tervezése',

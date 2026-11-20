@@ -338,8 +338,18 @@ class MailStore {
 
 export type MessageInsight = { loginCode?: string; phishing?: number; expectsReply?: number; meeting?: number }
 
+/**
+ * Attention score (0 routine, 1 worth attention, 2 time-critical) from which mail belongs on the main tab
+ * whatever its category: a security alert or a failed payment filed under Updates is read too late there.
+ */
+export const SURFACE_IMPORTANCE = 1
+
+/** Mail another tab would hide that needs attention, so it is shown on the main tab instead. */
+export const isSurfaced = (message: MessageSummary) =>
+  message.category != null && message.category !== 'primary' && (message.importance ?? 0) >= SURFACE_IMPORTANCE
+
 /** Mail judged before categories existed, or judged as uncategorisable, belongs on the main tab. */
-export const categoryOf = (message: MessageSummary): MailCategory => message.category ?? 'primary'
+export const categoryOf = (message: MessageSummary): MailCategory => isSurfaced(message) ? 'primary' : message.category ?? 'primary'
 
 export function readInsight(message: MessageSummary): MessageInsight | null {
   if (!message.insight) return null
