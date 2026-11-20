@@ -357,8 +357,9 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
     } catch { return null }
   }
 
-  async function respond(mode: 'reply' | 'forward') {
-    const latest = conversation?.latest
+  // Reply to the conversation's latest message, or to the one given, so a reply can answer any earlier message.
+  async function respond(mode: 'reply' | 'forward', target?: Message) {
+    const latest = target ?? conversation?.latest
     if (!latest) return
     const quoted = quoteForReply({ fromAddr: latest.fromAddr, createdAt: latest.createdAt, textBody: await bodyText(latest.id) }, i18n.locale)
     const subject = latest.subject ?? ''
@@ -523,7 +524,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
                 <article className="mx-auto w-full min-w-0 max-w-6xl p-4 md:p-6 lg:px-8">
                   <h2 className="flex items-start gap-2 text-xl font-semibold break-words sm:text-2xl">{conversation.latest.subject || i18n._('(No subject)')}{conversation.count > 1 && <span className="mt-1.5 shrink-0 rounded-full bg-muted px-2 text-xs font-medium tabular-nums text-muted-foreground">{conversation.count}</span>}</h2>
                   <div className="mt-2 divide-y">
-                    {conversation.messages.map((message) => <ThreadMessage key={message.id} message={message} expanded={expandedIds.has(message.id) || conversation.count === 1} single={conversation.count === 1} onToggle={() => toggleExpanded(message.id)} ownAddresses={ownAddresses} />)}
+                    {conversation.messages.map((message) => <ThreadMessage key={message.id} message={message} expanded={expandedIds.has(message.id) || conversation.count === 1} single={conversation.count === 1} onToggle={() => toggleExpanded(message.id)} ownAddresses={ownAddresses} onReply={() => void respond('reply', message)} />)}
                   </div>
                 </article>
                 </>
@@ -539,7 +540,7 @@ export function MailApp({ view, folderId }: { view: MailView; folderId?: string 
 }
 
 /** One message inside a conversation: a compact row when collapsed, header + body when expanded. */
-function ThreadMessage({ message, expanded, single, onToggle, ownAddresses }: { message: Message; expanded: boolean; single: boolean; onToggle: () => void; ownAddresses: Array<string> }) {
+function ThreadMessage({ message, expanded, single, onToggle, ownAddresses, onReply }: { message: Message; expanded: boolean; single: boolean; onToggle: () => void; ownAddresses: Array<string>; onReply: () => void }) {
   const { i18n } = useLingui()
   const [body, setBody] = useState<CachedBody<Attachment, SecurityDetails> | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -584,7 +585,7 @@ function ThreadMessage({ message, expanded, single, onToggle, ownAddresses }: { 
   const invited = loaded && body.attachments.some((attachment) => attachment.contentType === 'text/calendar')
   const text = loaded ? splitQuotedText(body.textBody ?? '') : null
   return <div className="py-2">
-    <MessageHeader message={message} security={loaded ? body.security : null} open={detailsOpen} onToggle={() => setDetailsOpen((value) => !value)} ownAddresses={ownAddresses} onCollapse={single ? undefined : onToggle} />
+    <MessageHeader message={message} security={loaded ? body.security : null} open={detailsOpen} onToggle={() => setDetailsOpen((value) => !value)} ownAddresses={ownAddresses} onCollapse={single ? undefined : onToggle} onReply={single || message.status === 'draft' ? undefined : onReply} />
     {(readInsight(message)?.phishing ?? 0) >= 0.7 && <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"><TriangleAlert className="mt-0.5 size-4 shrink-0" /><span><strong className="block font-semibold"><Trans id="This message asks for credentials or payment in a way that looks deceptive." /></strong><span className="text-xs"><Trans id="Check the sender address before you act on it." /></span></span></p>}
     {message.direction === 'outbound' && message.deliveryError && <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"><TriangleAlert className="mt-0.5 size-4 shrink-0" /><span><strong className="block font-semibold"><Trans id="This message could not be delivered." /></strong><span className="break-words text-xs">{message.deliveryError}</span></span></p>}
     {!loaded
@@ -616,7 +617,7 @@ function AddToCalendar({ messageId }: { messageId: string }) {
   </div>
 }
 
-function MessageHeader({ message, security, open, onToggle, ownAddresses, onCollapse }: { message: Message; security: SecurityDetails | null; open: boolean; onToggle: () => void; ownAddresses: Array<string>; onCollapse?: () => void }) {
+function MessageHeader({ message, security, open, onToggle, ownAddresses, onCollapse, onReply }: { message: Message; security: SecurityDetails | null; open: boolean; onToggle: () => void; ownAddresses: Array<string>; onCollapse?: () => void; onReply?: () => void }) {
   const { i18n } = useLingui()
   const from = senderParts(message.fromAddr)
   const to = senderParts(message.toAddr)
@@ -649,6 +650,7 @@ function MessageHeader({ message, security, open, onToggle, ownAddresses, onColl
             <strong className="truncate text-sm">{from.name}</strong>
             {from.address !== from.name && <span className="truncate text-xs text-muted-foreground">&lt;{from.address}&gt;</span>}
             <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground">{dateLabel} ({relativeTime(date, i18n.locale)})</span>
+            {onReply && <button type="button" onClick={onReply} className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={i18n._('Reply to this message')} title={i18n._('Reply to this message')}><CornerUpLeft className="size-4" /></button>}
             {onCollapse && <button type="button" onClick={onCollapse} className="-mr-1 grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={i18n._('Collapse message')} title={i18n._('Collapse message')}><ChevronUp className="size-4" /></button>}
           </div>
           <button type="button" onClick={onToggle} aria-expanded={open} className="mt-0.5 flex items-center gap-0.5 rounded text-xs text-muted-foreground hover:text-foreground" aria-label={i18n._('Message details')} title={i18n._('Message details')}>

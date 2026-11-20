@@ -247,6 +247,7 @@ export const messages = {
   'Manage contacts and blocked senders.': 'Manage contacts and blocked senders.',
   'Reusable drafts for common replies.': 'Reusable drafts for common replies.',
   'Events with email invitations.': 'Events with email invitations.',
+  'Reply to this message': 'Reply to this message',
   'Reply to': 'Reply to',
   Cc: 'Cc',
   Bcc: 'Bcc',
